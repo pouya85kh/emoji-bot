@@ -60,7 +60,13 @@ EMOJI = {
     "back":        DECO_EMOJI_ID,  # 🔙 بازگشت / لغو / حذف
 }
  
-client = TelegramClient("bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+SESSION_PATH = os.environ.get("SESSION_PATH", "/data/bot")
+
+client = TelegramClient(
+    SESSION_PATH,
+    API_ID,
+    API_HASH
+).start(bot_token=BOT_TOKEN)
  
 # حافظه موقت برای مراحل چندپیامی (state هر کاربر)
 pending = {}   # user_id -> dict(action=..., **extra)
