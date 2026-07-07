@@ -38,8 +38,9 @@ PACK_LINK_RE = re.compile(r"(?:addemoji|addstickers)/([a-zA-Z0-9_]+)")
 CODE_RE = re.compile(r"\[(\d+)\]")
 DB_PATH = os.environ.get("DB_PATH", "bot.db")
 
-# آیدی ایموجی‌های پرمیوم پیش‌فرض برای دکوراسیون منوها (حتماً با آیدی‌های واقعی جایگزین شود)
-DECO_EMOJI_ID = "5057918405923832965"
+# آیدی ایموجی‌های دکوراتور برای رنگی‌سازی منوها مطابق تصاویر ارسالی
+# در صورت نیاز می‌توانید با آیدی‌های دلخواه جایگزین کنید
+DECO_EMOJI_ID = "5057918405923832965" 
 
 EMOJI_IDS = {
     "rocket": DECO_EMOJI_ID,
@@ -85,20 +86,19 @@ def db_init():
     """)
     _conn.commit()
 
-    # 🔴 اضافه کردن ستون lang در صورتی که دیتابیس قدیمی روی سرور باشد
+    # رفع مشکل نبودن ستون زبان در نسخه‌های قدیمی دیتابیس
     try:
         cur.execute("ALTER TABLE users ADD COLUMN lang TEXT;")
         _conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # ساخت بقیه جدول‌ها
     cur.execute("""
     CREATE TABLE IF NOT EXISTS saved_emojis(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         name TEXT,
-        doc_id INTEGER
+        doc_id TEXT
     );
     """)
     cur.execute("""
@@ -142,7 +142,7 @@ def get_user(user_id: int):
     row = cur.fetchone()
     if row is None:
         return None
-    return dict(row) # تبدیل خروجی به دیکشنری استاندارد پایتون
+    return dict(row)
 
 def set_user_lang(user_id: int, lang: str):
     cur = _conn.cursor()
@@ -190,7 +190,8 @@ def get_or_create_set_code(user_id: int) -> str:
 def find_user_by_set_code(code: str):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM users WHERE set_code=?", (code,))
-    return cur.fetchone()
+    row = cur.fetchone()
+    return dict(row) if row else None
 
 def add_channel(user_id: int, channel_id: int, title: str) -> bool:
     cur = _conn.cursor()
@@ -243,19 +244,19 @@ def all_user_ids():
 STRINGS = {
     "fa": {
         "welcome": "خوش آمدید {}!\n─\nبا این ربات می‌توانید ایموجی‌های پرمیوم را در هر چتی ارسال کنید.\nمنوی زیر را انتخاب کنید:",
-        "menu_premium": "✨ ارسال ایموجی پرمیوم",
-        "menu_extract": "🔗 استخراج کد ایموجی",
-        "menu_account": "🖥 حساب من",
-        "menu_help": "❓ راهنما",
-        "menu_support": "✉️ پشتیبانی",
-        "admin_panel": "⚙️ پنل مدیریت",
+        "menu_premium": "🔮 ارسال ایموجی پرمیوم",
+        "menu_extract": "📥 استخراج کد ایموجی",
+        "menu_account": "👤 حساب من",
+        "menu_help": "📚 راهنما",
+        "menu_support": "📞 پشتیبانی",
+        "admin_panel": "🛠 پنل مدیریت",
         "back": "🔙 بازگشت",
         "lang_select": "🌐 لطفا زبان خود را انتخاب کنید / Please select your language:",
         "invalid_set": "⚠️ کد ست معتبر نیست یا منقضی شده.",
         "set_added": "✅ {} ایموجی از ست دریافتی به حساب شما اضافه شد.",
         "premium_section": "✨ ارسال ایموجی پرمیوم\n─\nیک پیام جدید در همین چت بفرستید:\n⚡ چند ایموجی پرمیوم بفرستید یا کد عددی وارد کنید:\n`[5792080508976373427]`",
         "inline_btn": "✨ رفتن به حالت اینلاین",
-        "extract_section": "📤 استخراج کد ایموجی پرمیوم\n─\nیک یا چند ایموجی پرمیوم برای من بفرستید:",
+        "extract_section": "📤 استخراج کد ایموجی پرمیوم\n─\nیک یا چند ایموجی پرمیوم برای من بفرستید یا از دکمه زیر استفاده کنید:",
         "extract_pack_btn": "🎁 استخراج از لینک پک",
         "await_pack": "🎁 لینک پک ایموجی پرمیوم را بفرستید:\nمثال: `https://t.me/addemoji/PackName`",
         "invalid_pack": "⚠️ لینک معتبر پک ایموجی نیست.",
@@ -264,21 +265,21 @@ STRINGS = {
         "pack_success": "✅ استخراج {} ایموجی از پک انجام شد.",
         "my_emojis_title": "⭐ ایموجی‌های ذخیره‌شده: {}/{}",
         "no_emojis": "هنوز ایموجی‌ای ذخیره نکردید.",
-        "add_emoji_btn": "✏️ افزودن ایموجی",
+        "add_emoji_btn": "➕ افزودن ایموجی جدید",
         "limit_reached": "⛔️ به سقف ذخیره‌سازی رسیده‌اید.",
-        "send_emoji_prompt": "✏️ ایموجی پرمیوم مورد نظر یا کد آن را بفرستید:",
-        "send_name_prompt": "🎙 حالا یک اسم دلخواه برای این ایموجی بفرستید:",
+        "send_emoji_prompt": "✏️ حالا خود ایموجی پرمیوم مورد نظر یا کد آن را بفرستید:",
+        "send_name_prompt": "🎙 ابتدا یک اسم دلخواه برای این ایموجی بفرستید:",
         "saved_success": "«{}» ذخیره شد ✅",
         "account_txt": "💠 حساب کاربری شما\n─\n◁ آیدی: {}\n◁ نام: {}\n◁ زبان: {}\n◁ نوع کاربری: {}\n📈 ذخیره‌شده: {}/{}",
         "stats_btn": "📊 آمار من",
-        "set_btn": "⭐ اشتراک ست من",
+        "set_btn": "🔗 اشتراک ست من",
         "change_lang_btn": "🌐 تغییر زبان / Change Lang",
         "my_stats_txt": "📊 آمار شما\n─\n⭐ تعداد ایموجی: {}\n📋 تعداد کانال‌ها: {}",
         "my_set_txt": "✅ ست شما آماده اشتراک شد!\n─\n◁ کد ست: {}\n دوست شما این لینک را باز کند تا ست را دریافت کند:\n{}",
         "copy_btn": "⭐ کپی لینک",
         "channels_txt": "⌘ کانال‌های من\n─\nپست‌های حاوی کد به صورت خودکار تبدیل می‌شوند.\n\n",
         "no_channels": "◁ هنوز کانالی ثبت نکردید.",
-        "add_channel_btn": "✏️ افزودن کانال",
+        "add_channel_btn": "➕ افزودن کانال",
         "add_channel_prompt": "✈️ افزودن کانال\n─\nربات را در کانال خود ادمین کنید و آیدی یا یوزرنیم آن را بفرستید:\nمثل @my_channel",
         "channel_not_found": "❌ کانال پیدا نشد.",
         "channel_invalid": "⚠️ این یک کانال معتبر نیست.",
@@ -288,8 +289,8 @@ STRINGS = {
         "channel_success": "✅ کانال با موفقیت ثبت شد.",
         "help_txt": "❓ راهنمای ربات\n─\n1️⃣ برای ارسال اینلاین:\n`@bot_username text [code]`\n2️⃣ ارسال لینک پک برای استخراج\n3️⃣ دکمه زیر برای ساخت پک‌های شخصی کاربرد دارد:",
         "support_txt": "💎 پشتیبانی\n─\nروش ارتباطی خود را انتخاب کنید:",
-        "support_chat_btn": "🦖 پیوی پشتیبانی",
-        "support_ticket_btn": "🖼 ارسال تیکت",
+        "support_chat_btn": "👨‍💻 پیوی پشتیبانی",
+        "support_ticket_btn": "🎫 ارسال تیکت جدید",
         "support_prompt": "📨 پیام خود را بنویسید تا برای پشتیبانی ارسال شود:",
         "support_sent": "✅ پیام شما برای پشتیبانی ارسال شد.",
         "ticket_prompt": "🖼 متن تیکت خود را بنویسید:",
@@ -297,12 +298,12 @@ STRINGS = {
     },
     "en": {
         "welcome": "Welcome {}!\n─\nWith this bot, you can send premium emojis in any chat.\nSelect from the menu below:",
-        "menu_premium": "✨ Send Premium Emoji",
-        "menu_extract": "🔗 Extract Emoji Code",
-        "menu_account": "🖥 My Account",
-        "menu_help": "❓ Help",
-        "menu_support": "✉️ Support",
-        "admin_panel": "⚙️ Admin Panel",
+        "menu_premium": "🔮 Send Premium Emoji",
+        "menu_extract": "📥 Extract Emoji Code",
+        "menu_account": "👤 My Account",
+        "menu_help": "📚 Help Guide",
+        "menu_support": "📞 Support",
+        "admin_panel": "🛠 Admin Panel",
         "back": "🔙 Back",
         "lang_select": "🌐 Please select your language / لطفا زبان خود را انتخاب کنید:",
         "invalid_set": "⚠️ Invalid or expired set code.",
@@ -318,21 +319,21 @@ STRINGS = {
         "pack_success": "✅ Successfully extracted {} emojis from the pack.",
         "my_emojis_title": "⭐ Saved Emojis: {}/{}",
         "no_emojis": "You haven't saved any emojis yet.",
-        "add_emoji_btn": "✏️ Add Emoji",
+        "add_emoji_btn": "➕ Add New Emoji",
         "limit_reached": "⛔️ Storage limit reached.",
         "send_emoji_prompt": "✏️ Send the premium emoji or its code:",
-        "send_name_prompt": "🎙 Now enter a custom name for this emoji:",
+        "send_name_prompt": "🎙 First enter a custom name for this emoji:",
         "saved_success": "«{}» Saved successfully ✅",
         "account_txt": "💠 Your Account\n─\n◁ ID: {}\n◁ Name: {}\n◁ Lang: {}\n◁ Type: {}\n📈 Saved: {}/{}",
         "stats_btn": "📊 My Stats",
-        "set_btn": "⭐ Share My Set",
+        "set_btn": "🔗 Share My Set",
         "change_lang_btn": "🌐 Change Language",
         "my_stats_txt": "📊 Your Stats\n─\n⭐ Emojis: {}\n📋 Channels: {}",
         "my_set_txt": "✅ Your set is ready to share!\n─\n◁ Set Code: {}\n Your friend can open this link to get the entire set:\n{}",
         "copy_btn": "⭐ Copy Link",
         "channels_txt": "⌘ My Channels\n─\nPosts with codes will be converted automatically.\n\n",
         "no_channels": "◁ No channels registered yet.",
-        "add_channel_btn": "✏️ Add Channel",
+        "add_channel_btn": "➕ Add Channel",
         "add_channel_prompt": "✈️ Add Channel\n─\nPromote the bot to admin in your channel and send its ID or Username:\nE.g., @my_channel",
         "channel_not_found": "❌ Channel not found.",
         "channel_invalid": "⚠️ Not a valid channel.",
@@ -342,8 +343,8 @@ STRINGS = {
         "channel_success": "✅ Channel registered successfully.",
         "help_txt": "❓ Bot Help Guide\n─\n1️⃣ To send inline:\n`@bot_username text [code]`\n2️⃣ Send pack link to extract codes.\n3️⃣ Use the button below to easily build your own custom packs:",
         "support_txt": "💎 Support\n─\nChoose your communication method:",
-        "support_chat_btn": "🦖 Support PM",
-        "support_ticket_btn": "🖼 Submit Ticket",
+        "support_chat_btn": "👨‍💻 Support PM",
+        "support_ticket_btn": "🎫 Submit Ticket",
         "support_prompt": "📨 Write your message to send directly to support:",
         "support_sent": "✅ Message sent to support team.",
         "ticket_prompt": "🖼 Write your ticket description:",
@@ -353,20 +354,8 @@ STRINGS = {
 
 def get_txt(user_id: int, key: str) -> str:
     u = get_user(user_id)
-    lang = u["lang"] if u else "fa"
+    lang = u["lang"] if u and u.get("lang") else "fa"
     return STRINGS.get(lang, STRINGS["fa"]).get(key, STRINGS["fa"][key])
-
-# ================= اینتیتی ایموجی پریمیوم ایاگرام =================
-def make_premium_text(text: str, emoji_key: str) -> tuple:
-    """یک متن به همراه اینتیتی ایموجی سفارشی متحرک ایجاد می‌کند."""
-    full_text = f"🧬 {text}" # 🧬 به عنوان فال‌بک رندر محلی چت
-    entity = MessageEntity(
-        type="custom_emoji",
-        offset=0,
-        length=2,
-        custom_emoji_id=EMOJI_IDS.get(emoji_key, DECO_EMOJI_ID)
-    )
-    return full_text, [entity]
 
 # ================= ایاگرام ستاپ =================
 bot = Bot(token=BOT_TOKEN, default_auth_date_format=None)
@@ -376,15 +365,15 @@ dp = Dispatcher(storage=storage)
 class BotStates(StatesGroup):
     await_lang = State()
     await_pack_link = State()
-    await_add_emoji_id = State()
     await_add_emoji_name = State()
+    await_add_emoji_id = State()
     await_channel_id = State()
     await_support_msg = State()
     await_ticket_msg = State()
     admin_unlimit_target = State()
     admin_broadcast_msg = State()
 
-# ================= کیبوردهای منوی اصلی =================
+# ================= کیبوردهای منوی اصلی (رنگی‌شده با استایل تصاویر) =================
 def get_main_menu(user_id: int) -> InlineKeyboardMarkup:
     ensure_user(user_id)
     btn_premium = InlineKeyboardButton(text=get_txt(user_id, "menu_premium"), callback_data="menu_premium")
@@ -394,7 +383,8 @@ def get_main_menu(user_id: int) -> InlineKeyboardMarkup:
     btn_support = InlineKeyboardButton(text=get_txt(user_id, "menu_support"), callback_data="menu_support")
     
     keyboard = [
-        [btn_premium, btn_extract],
+        [btn_premium],
+        [btn_extract],
         [btn_account, btn_help],
         [btn_support]
     ]
@@ -409,7 +399,6 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
     user_id = message.from_user.id
     ensure_user(user_id, message.from_user.first_name, message.from_user.username)
     
-    # بررسی دیپ‌لینک اشتراک ست
     if command.args and command.args.startswith("set_"):
         code = command.args[4:]
         owner = find_user_by_set_code(code)
@@ -430,7 +419,6 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
 
     u = get_user(user_id)
     if not u or not u.get("lang"):
-        # بار اول: انتخاب زبان
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="فارسی 🇮🇷", callback_data="setlang_fa"),
              InlineKeyboardButton(text="English 🇬🇧", callback_data="setlang_en")]
@@ -462,7 +450,7 @@ async def cb_menu_premium(callback: CallbackQuery):
     user_id = callback.from_user.id
     txt = get_txt(user_id, "premium_section")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=get_txt(user_id, "inline_btn"), switch_inline_query="")],
+        [InlineKeyboardButton(text="✨ " + get_txt(user_id, "inline_btn"), switch_inline_query="")],
         [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
     ])
     await callback.message.edit_text(txt, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
@@ -470,8 +458,6 @@ async def cb_menu_premium(callback: CallbackQuery):
 @dp.inline_query()
 async def inline_query_handler(inline_query: InlineQuery):
     query = inline_query.query.strip()
-    bot_user = await bot.get_me()
-    
     if not query:
         await inline_query.answer(results=[
             InlineQueryResultArticle(
@@ -497,14 +483,12 @@ async def inline_query_handler(inline_query: InlineQuery):
         ], cache_time=0, is_personal=True)
         return
 
-    # پردازش متن و تبدیل کدهای عددی به ساختار پریمیوم کلاینتی متناظر
     text_buffer = ""
     entities = []
     last_idx = 0
     
     for m in matches:
         text_buffer += query[last_idx:m.start()]
-        # افزودن اینتیتی ایموجی پریمیوم اتمیک
         entities.append(MessageEntity(
             type="custom_emoji",
             offset=len(text_buffer.encode("utf-16-le")) // 2,
@@ -528,13 +512,13 @@ async def inline_query_handler(inline_query: InlineQuery):
         )
     ], cache_time=0, is_personal=True)
 
-# ================= بخش استخراج کدهای ایموجی =================
+# ================= بخش استخراج کدهای ایموجی (با رفع باگ نمایش زنده لیست) =================
 @dp.callback_query(F.data == "menu_extract")
 async def cb_menu_extract(callback: CallbackQuery):
     user_id = callback.from_user.id
     txt = get_txt(user_id, "extract_section")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=get_txt(user_id, "extract_pack_btn"), callback_data="extract_pack")],
+        [InlineKeyboardButton(text="🎁 " + get_txt(user_id, "extract_pack_btn"), callback_data="extract_pack")],
         [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
     ])
     await callback.message.edit_text(txt, reply_markup=kb)
@@ -557,37 +541,54 @@ async def process_pack_link(message: Message, state: FSMContext):
         return
         
     await state.clear()
-    short_name = match.group(1)
     status_msg = await message.reply(get_txt(user_id, "fetching_pack"))
+    short_name = match.group(1)
     
     try:
-        # دریافت اطلاعات استیکر ست پریمیوم از وب‌متد رسمی ربات تلگرام
         stickerset = await bot.get_sticker_set(name=short_name)
         if not stickerset or not stickerset.stickers:
             await status_msg.edit_text(get_txt(user_id, "pack_empty"))
             return
             
-        # رندر و جداسازی نتایج به همراه فرمت اتمیک کدها به صورت چانک‌های متنی
         output_txt = f"📦 Pack: `{short_name}`\n─\n"
-        for idx, sticker in enumerate(stickerset.stickers[:40], 1): # محدودیت متنی پیام تلگرام ۴۰ عدد چانک
-            output_txt += f"{idx}. Code: `{sticker.custom_emoji_id}`\n─\n"
+        entities = []
+        
+        # استخراج و رندر لیست به صورت زنده (خود ایموجی پرمیوم + روبه‌رو آیدی عددی)
+        for idx, sticker in enumerate(stickerset.stickers[:35], 1): 
+            if not sticker.custom_emoji_id:
+                continue
+            current_offset = len(output_txt.encode("utf-16-le")) // 2
+            output_txt += f"{idx}. {FALLBACK_EMOJI}  `[{sticker.custom_emoji_id}]`\n"
             
-        await message.reply(output_txt, parse_mode=ParseMode.MARKDOWN)
+            entities.append(MessageEntity(
+                type="custom_emoji",
+                offset=current_offset + len(f"{idx}. ".encode("utf-16-le")) // 2,
+                length=1,
+                custom_emoji_id=str(sticker.custom_emoji_id)
+            ))
+            
+        await message.reply(output_txt, entities=entities, parse_mode=ParseMode.MARKDOWN)
         await status_msg.edit_text(get_txt(user_id, "pack_success").format(len(stickerset.stickers)))
         
     except Exception as e:
         await status_msg.edit_text(f"❌ Error: {str(e)}")
 
-# استخراج تکی ایموجی در پیوی ربات خارج از استیت
 @dp.message(F.chat.type == "private", F.custom_emoji_text)
 async def process_direct_emoji(message: Message):
-    # تفکیک دقیق تمام سورس اینتیتی‌های مالتی‌پلتفرم کاستوم ایموجی
     custom_emoji_ids = [e.custom_emoji_id for e in message.entities if e.type == "custom_emoji"]
     if custom_emoji_ids:
         res = "🅰 Premium Emojis Detected:\n\n"
+        entities = []
         for cid in custom_emoji_ids:
-            res += f"Code: `{cid}`\n"
-        await message.reply(res, parse_mode=ParseMode.MARKDOWN)
+            current_offset = len(res.encode("utf-16-le")) // 2
+            res += f"{FALLBACK_EMOJI} Code: `{cid}`\n"
+            entities.append(MessageEntity(
+                type="custom_emoji",
+                offset=current_offset,
+                length=1,
+                custom_emoji_id=str(cid)
+            ))
+        await message.reply(res, entities=entities, parse_mode=ParseMode.MARKDOWN)
 
 # ================= مدیریت ذخیره شخصی (ایموجی‌های من) =================
 PAGE_SIZE = 5
@@ -596,23 +597,20 @@ def render_my_emojis(user_id: int, page: int = 0) -> tuple:
     rows = list_saved_emojis(user_id)
     total = len(rows)
     limit = user_limit(user_id)
-    limit_txt = get_txt(user_id, "unlimited") if limit is None else str(limit)
+    limit_txt = "Unlimited" if limit is None else str(limit)
     
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
     page_rows = rows[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     
     text = get_txt(user_id, "my_emojis_title").format(total, limit_txt) + "\n"
-    
     kb_builder = []
     entities = []
     
-    # تصحیح بر اساس تصویر پیوست شده کاربر: قرار دادن خود ایموجی به جای کد عددی در کیبورد شیشه‌ای
     for r in page_rows:
         current_offset = len(text.encode("utf-16-le")) // 2
         text += f"▪️ {r['name']}: {FALLBACK_EMOJI}\n"
         
-        # ثبت جزییات برای رندر شدن خود ایموجی پریمیوم داخل متن مسیج باکس
         entities.append(MessageEntity(
             type="custom_emoji",
             offset=current_offset + len(f"▪️ {r['name']}: ".encode("utf-16-le")) // 2,
@@ -620,13 +618,13 @@ def render_my_emojis(user_id: int, page: int = 0) -> tuple:
             custom_emoji_id=str(r['doc_id'])
         ))
         
-        # دکمه‌های ریفکتور شده ردیف ایموجی به شکل شیشه‌ای پیشرفته
         kb_builder.append([
-            InlineKeyboardButton(text=f"🧬 {r['name']}", callback_data="noop"), # دکمه نام کاربری
-            InlineKeyboardButton(text="🗑", callback_data=f"del_{r['id']}_{page}") # دکمه حذف اتمیک
+            InlineKeyboardButton(text=f"🧬 {r['name']}", callback_data="noop"), 
+            InlineKeyboardButton(text="🗑", callback_data=f"del_{r['id']}_{page}") 
         ])
         
     nav_row = [
+        InlineKeyboardButton(text=f"◀️", callback_data=f"page_{page-1}"),
         InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"),
         InlineKeyboardButton(text="➡️", callback_data=f"page_{page+1}")
     ]
@@ -668,7 +666,7 @@ async def cb_del_emoji(callback: CallbackQuery):
 async def cb_noop(callback: CallbackQuery):
     await callback.answer()
 
-# روند استاندارد درخواست اطلاعات طبق نکته شماره ۱ فرموده شده
+# ---- فیکس باگ بخش افزودن ایموجی ----
 @dp.callback_query(F.data == "add_emo")
 async def cb_add_emo_start(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -677,12 +675,15 @@ async def cb_add_emo_start(callback: CallbackQuery, state: FSMContext):
         await callback.answer(get_txt(user_id, "limit_reached"), show_alert=True)
         return
         
-    await state.set_state(BotStates.await_add_emoji_name) # ابتدا دریافت نام اختیاری/پیش فرض طبق فلو درخواستی
+    await state.set_state(BotStates.await_add_emoji_name) 
     await callback.message.edit_text(get_txt(user_id, "send_name_prompt"))
 
 @dp.message(BotStates.await_add_emoji_name)
 async def process_emoji_name(message: Message, state: FSMContext):
     name = (message.text or "").strip()
+    if not name:
+        await message.reply("❌ نام نامعتبر است. مجددا ارسال کنید:")
+        return
     await state.update_data(saved_name=name)
     await state.set_state(BotStates.await_add_emoji_id)
     await message.reply(get_txt(message.from_user.id, "send_emoji_prompt"))
@@ -691,7 +692,7 @@ async def process_emoji_name(message: Message, state: FSMContext):
 async def process_emoji_id_save(message: Message, state: FSMContext):
     user_id = message.from_user.id
     data = await state.get_data()
-    name = data.get("saved_name", f"Emoji #{random.randint(100,999)}")
+    name = data.get("saved_name", "Emoji")
     
     custom_emoji_ids = [e.custom_emoji_id for e in message.entities if e.type == "custom_emoji"] if message.entities else []
     if not custom_emoji_ids:
@@ -700,7 +701,7 @@ async def process_emoji_id_save(message: Message, state: FSMContext):
             custom_emoji_ids = [matches[0]]
             
     if not custom_emoji_ids:
-        await message.reply("⚠️ No premium emoji code found.")
+        await message.reply("⚠️ هیچ کدی یا ایموجی پرمیومی یافت نشد. مجددا ارسال کنید:")
         return
         
     doc_id = custom_emoji_ids[0]
@@ -708,13 +709,12 @@ async def process_emoji_id_save(message: Message, state: FSMContext):
     
     add_saved_emoji(user_id, name, doc_id)
     
-    # ساخت اینتیتی نمایش زنده ایموجی ذخیره شده در متن تاییدیه نهایی
     success_text = get_txt(user_id, "saved_success").format(name)
     full_text = f"{FALLBACK_EMOJI} {success_text}"
     ent = MessageEntity(type="custom_emoji", offset=0, length=1, custom_emoji_id=str(doc_id))
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⭐ Emojis", callback_data="menu_my_emojis")]
+        [InlineKeyboardButton(text="⭐ نمایش ایموجی‌ها", callback_data="menu_my_emojis")]
     ])
     await message.reply(text=full_text, entities=[ent], reply_markup=kb)
 
@@ -726,16 +726,17 @@ async def cb_menu_account(callback: CallbackQuery):
     limit = user_limit(user_id)
     limit_txt = "Unlimited" if limit is None else str(limit)
     count = user_emoji_count(user_id)
-    kind = "Premium (Unlimited)" if u["unlimited"] else "Regular User"
+    kind = "Premium (Unlimited)" if u.get("unlimited") else "Regular User"
     
     txt = get_txt(user_id, "account_txt").format(
-        user_id, callback.from_user.first_name or "-", u["lang"], kind, count, limit_txt
+        user_id, callback.from_user.first_name or "-", u.get("lang", "fa"), kind, count, limit_txt
     )
     
+    # منوی شیک حساب کاربری بر اساس عکس‌ها
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=get_txt(user_id, "add_emoji_btn"), callback_data="menu_my_emojis"),
+        [InlineKeyboardButton(text="⭐ ایموجی‌های من", callback_data="menu_my_emojis"),
          InlineKeyboardButton(text=get_txt(user_id, "stats_btn"), callback_data="my_stats")],
-        [InlineKeyboardButton(text="📢 کانال‌های من" if get_user(user_id)["lang"] == "fa" else "📢 My Channels", callback_data="menu_channels"),
+        [InlineKeyboardButton(text="📢 کانال‌های من", callback_data="menu_channels"),
          InlineKeyboardButton(text=get_txt(user_id, "set_btn"), callback_data="my_set")],
         [InlineKeyboardButton(text=get_txt(user_id, "change_lang_btn"), callback_data="change_lang")],
         [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
@@ -784,7 +785,7 @@ async def cb_copy_link(callback: CallbackQuery):
     link = f"https://t.me/{bot_user.username}?start=set_{code}"
     await callback.answer(f"Link: {link}", show_alert=True)
 
-# ================= مدیریت کانال‌ها + فیکس اساسی کانال پست پست هک (نکته ۵) =================
+# ================= مدیریت کانال‌ها =================
 @dp.callback_query(F.data == "menu_channels")
 async def cb_menu_channels(callback: CallbackQuery):
     user_id = callback.from_user.id
@@ -852,7 +853,6 @@ async def process_channel_input(message: Message, state: FSMContext):
         
     await message.reply(get_txt(user_id, "channel_success"))
 
-# هندلر مانیتورینگ خودکار ادیت پست‌های کانال (رفع قطعی مشکل تک ستاره شدن در نکته ۵)
 @dp.channel_post(F.text)
 async def auto_convert_channel_post(message: Message):
     if not is_registered_channel(message.chat.id):
@@ -872,7 +872,7 @@ async def auto_convert_channel_post(message: Message):
             type="custom_emoji",
             offset=len(text_buffer.encode("utf-16-le")) // 2,
             length=1,
-            custom_emoji_id=str(m.group(1)) # قرار دادن دقیق آیدی اصلی ایموجی به صورت اتمیک
+            custom_emoji_id=str(m.group(1)) 
         ))
         text_buffer += FALLBACK_EMOJI
         last_idx = m.end()
@@ -889,13 +889,13 @@ async def auto_convert_channel_post(message: Message):
     except Exception as e:
         print(f"Channel replace log err: {e}")
 
-# ================= بخش راهنما و ربات مکمل =================
+# ================= بخش راهنما =================
 @dp.callback_query(F.data == "menu_help")
 async def cb_menu_help(callback: CallbackQuery):
     user_id = callback.from_user.id
     txt = get_txt(user_id, "help_txt")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛠️ Maker Bot: @TgEmojis_bot", url="https://t.me/TgEmojis_bot")], # دکمه مکمل بر اساس نکته ۶ شما
+        [InlineKeyboardButton(text="🛠️ Maker Bot: @TgEmojis_bot", url="https://t.me/TgEmojis_bot")],
         [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
     ])
     await callback.message.edit_text(txt, reply_markup=kb)
