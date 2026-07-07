@@ -550,21 +550,29 @@ async def process_pack_link(message: Message, state: FSMContext):
             await status_msg.edit_text(get_txt(user_id, "pack_empty"))
             return
             
+        # ساخت بخش هدر متن
         output_txt = f"📦 Pack: `{short_name}`\n─\n"
         entities = []
         
-        # استخراج و رندر لیست به صورت زنده (خود ایموجی پرمیوم + روبه‌رو آیدی عددی)
+        # استخراج تک‌تک ایموجی‌ها به همراه آیدی اختصاصی خودشان
         for idx, sticker in enumerate(stickerset.stickers[:35], 1): 
             if not sticker.custom_emoji_id:
                 continue
+                
+            # محاسبه آفست کاراکتر بر اساس انکودینگ UTF-16 که تلگرام برای متون نیاز دارد
             current_offset = len(output_txt.encode("utf-16-le")) // 2
+            
+            # اضافه کردن سطر جدید (ابتدا ستاره به عنوان جایگاه موقت رندر، سپس کد عددی)
             output_txt += f"{idx}. {FALLBACK_EMOJI}  `[{sticker.custom_emoji_id}]`\n"
+            
+            # آدرس‌دهی دقیق به تلگرام برای جایگزین کردن ستاره با ایموجی پرمیوم اصلی خودش
+            emoji_offset = current_offset + len(f"{idx}. ".encode("utf-16-le")) // 2
             
             entities.append(MessageEntity(
                 type="custom_emoji",
-                offset=current_offset + len(f"{idx}. ".encode("utf-16-le")) // 2,
+                offset=emoji_offset,
                 length=1,
-                custom_emoji_id=str(sticker.custom_emoji_id)
+                custom_emoji_id=str(sticker.custom_emoji_id) # آیدی اختصاصی همین ایموجی
             ))
             
         await message.reply(output_txt, entities=entities, parse_mode=ParseMode.MARKDOWN)
