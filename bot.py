@@ -44,7 +44,7 @@ EMOJI = {
     "link":        DECO_EMOJI_ID,  # 🔗 استخراج کد ایموجی
     "panel":       DECO_EMOJI_ID,  # 🖥 حساب من
     "help":        DECO_EMOJI_ID,  # ❓ راهنما
-    "mail":        5971889748615105853,  # ✉️ پشتیبانی
+    "mail":        DECO_EMOJI_ID,  # ✉️ پشتیبانی
     "gem":         DECO_EMOJI_ID,  # 💎 پشتیبانی هدر
     "bolt":        DECO_EMOJI_ID,  # ⚡ نکات/دسترسی‌ها
     "note":        DECO_EMOJI_ID,  # 📝 توضیحات
