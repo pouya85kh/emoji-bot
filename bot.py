@@ -72,7 +72,7 @@ _conn.row_factory = sqlite3.Row
 
 def db_init():
     cur = _conn.cursor()
-    cur.executescript("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS users(
         user_id INTEGER PRIMARY KEY,
         first_name TEXT,
@@ -80,21 +80,36 @@ def db_init():
         emoji_limit INTEGER DEFAULT 50,
         unlimited INTEGER DEFAULT 0,
         set_code TEXT,
-        lang TEXT DEFAULT 'fa',
         joined_at TEXT
     );
+    """)
+    _conn.commit()
+
+    # 🔴 اضافه کردن ستون lang در صورتی که دیتابیس قدیمی روی سرور باشد
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN lang TEXT;")
+        _conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # ساخت بقیه جدول‌ها
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS saved_emojis(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         name TEXT,
-        doc_id TEXT
+        doc_id INTEGER
     );
+    """)
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS channels(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         channel_id TEXT,
         title TEXT
     );
+    """)
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS tickets(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -127,7 +142,7 @@ def get_user(user_id: int):
     row = cur.fetchone()
     if row is None:
         return None
-    return dict(row)
+    return dict(row) # تبدیل خروجی به دیکشنری استاندارد پایتون
 
 def set_user_lang(user_id: int, lang: str):
     cur = _conn.cursor()
