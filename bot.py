@@ -124,7 +124,10 @@ def ensure_user(user_id: int, first_name: str = None, username: str = None):
 def get_user(user_id: int):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    return cur.fetchone()
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return dict(row)
 
 def set_user_lang(user_id: int, lang: str):
     cur = _conn.cursor()
@@ -411,7 +414,7 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         return
 
     u = get_user(user_id)
-    if not u or not u["lang"]:
+    if not u or not u.get("lang"):
         # بار اول: انتخاب زبان
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="فارسی 🇮🇷", callback_data="setlang_fa"),
@@ -717,7 +720,7 @@ async def cb_menu_account(callback: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=get_txt(user_id, "add_emoji_btn"), callback_data="menu_my_emojis"),
          InlineKeyboardButton(text=get_txt(user_id, "stats_btn"), callback_data="my_stats")],
-        [InlineKeyboardButton(text=get_txt(user_id, "menu_channels"), callback_data="menu_channels"),
+        [InlineKeyboardButton(text="📢 کانال‌های من" if get_user(user_id)["lang"] == "fa" else "📢 My Channels", callback_data="menu_channels"),
          InlineKeyboardButton(text=get_txt(user_id, "set_btn"), callback_data="my_set")],
         [InlineKeyboardButton(text=get_txt(user_id, "change_lang_btn"), callback_data="change_lang")],
         [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
