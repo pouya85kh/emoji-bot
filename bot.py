@@ -95,7 +95,8 @@ def db_init():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         name TEXT,
-        doc_id INTEGER
+        doc_id INTEGER,
+        alt TEXT
     );
     CREATE TABLE IF NOT EXISTS channels(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,8 +113,14 @@ def db_init():
     );
     """)
     _conn.commit()
- 
- 
+    # مهاجرت برای دیتابیس‌های قدیمی‌تری که هنوز ستون alt را ندارند
+    try:
+        cur.execute("ALTER TABLE saved_emojis ADD COLUMN alt TEXT")
+        _conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+
 db_init()
  
  
@@ -153,9 +160,9 @@ def user_limit(user_id):
     return u["emoji_limit"]
  
  
-def add_saved_emoji(user_id, name, doc_id):
+def add_saved_emoji(user_id, name, doc_id, alt=None):
     cur = _conn.cursor()
-    cur.execute("INSERT INTO saved_emojis(user_id, name, doc_id) VALUES(?,?,?)", (user_id, name, doc_id))
+    cur.execute("INSERT INTO saved_emojis(user_id, name, doc_id, alt) VALUES(?,?,?,?)", (user_id, name, doc_id, alt))
     _conn.commit()
  
  
@@ -284,6 +291,79 @@ def extract_entities_from_message(event):
  
 def parse_codes_from_text(text):
     return [int(m.group(1)) for m in CODE_RE.finditer(text)]
+
+
+def extract_emojis_with_alt(event):
+    """
+    برخلاف extract_entities_from_message، این تابع برای هر ایموجی پرمیومی که کاربر واقعاً
+    در پیام فرستاده، هم document_id و هم گلیف واقعی (alt) را برمی‌گرداند. گلیف واقعی همان
+    کاراکتری‌ست که زیر entity قرار دارد و توسط کلاینت‌های بدون رندر (یا در حالت fallback) نشان
+    داده می‌شود؛ بدون این، هر ایموجی هنگام ذخیره یا نمایش با یک ستاره‌ی یکسان جایگزین می‌شود.
+    """
+    result = []
+    if event.message and event.message.entities and event.raw_text:
+        text16 = event.raw_text.encode("utf-16-le")
+        for e in event.message.entities:
+            if isinstance(e, types.MessageEntityCustomEmoji):
+                start = e.offset * 2
+                end = start + e.length * 2
+                try:
+                    alt = text16[start:end].decode("utf-16-le")
+                except Exception:
+                    alt = FALLBACK
+                result.append((e.document_id, alt or FALLBACK))
+    return result
+
+
+# =================================================================================
+# جایگزینی خودکار ایموجی‌های معمولی متن با ایموجی‌های پرمیوم متناظر
+# توجه مهم: این تابع فقط برای متنِ پیام‌ها کار می‌کند. تلگرام به دکمه‌های inline
+# اجازه‌ی حمل هیچ entity‌ای (نه ایموجی پرمیوم و نه رنگ) را نمی‌دهد، بنابراین برچسبِ
+# دکمه‌ها همیشه باید همان کاراکترهای یونیکد ساده باقی بمانند.
+# =================================================================================
+UNICODE_EMOJI_MAP = {
+    "🚀": "rocket", "✈️": "telegram", "⭐": "star", "🔗": "link", "🖥": "panel",
+    "❓": "help", "✉️": "mail", "💎": "gem", "⚡": "bolt", "📝": "note",
+    "🎙": "mic", "🎁": "gift", "📊": "chart", "📋": "folder", "✅": "check",
+    "⌘": "gear", "✏️": "pencil", "🦖": "dino", "🖼": "ticket", "🔙": "back",
+    "📈": "rocket", "📨": "mail", "🔷": "bolt", "🎉": "gift", "📤": "link",
+    "🅰": "note", "🔓": "check", "📢": "mail", "⏳": "bolt",
+}
+
+
+def premiumize(text: str):
+    """
+    هر ایموجی معمولی شناخته‌شده در متن را نگه می‌دارد ولی یک MessageEntityCustomEmoji
+    متناظر رویش می‌گذارد تا در کلاینت به‌صورت ایموجی پرمیوم رندر شود.
+    خروجی: (متن بدون تغییر ظاهری، لیست entityها)
+    """
+    entities = []
+    out = ""
+    i = 0
+    n = len(text)
+    while i < n:
+        matched = False
+        for ch, key in UNICODE_EMOJI_MAP.items():
+            if text.startswith(ch, i):
+                offset = utf16_len(out)
+                out += ch
+                entities.append(types.MessageEntityCustomEmoji(
+                    offset=offset, length=utf16_len(ch), document_id=EMOJI[key],
+                ))
+                i += len(ch)
+                matched = True
+                break
+        if not matched:
+            out += text[i]
+            i += 1
+    return out, entities
+ 
+ 
+async def edit_deco(event, text, buttons):
+    """میانبر برای ویرایش پیام‌ای که تمام ایموجی‌های معمولی شناخته‌شده‌ی متنش
+    باید به ایموجی پرمیوم تبدیل شوند (دکمه‌ها همچنان یونیکد ساده باقی می‌مانند)."""
+    text2, ent = premiumize(text)
+    await event.edit(text2, formatting_entities=ent, buttons=buttons, parse_mode=None)
  
  
 async def safe_send(user_id, *args, **kwargs):
@@ -319,12 +399,13 @@ async def send_main_menu(event, edit=False):
     text = f"{FALLBACK}  خوش آمدید {name}!\n" + "─" * 18 + \
            "\n\n📨  با این ربات می‌تونید ایموجی‌های پرمیوم رو\nدر هر چت تلگرامی ارسال کنید!" \
            "\n\n🔖  از منوی زیر استفاده کنید:"
-    ent = [types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI["rocket"])]
+    text, ent = premiumize(text)
+    ent.append(types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI["rocket"]))
     buttons = main_menu_buttons(event.sender_id)
     if edit:
-        await event.edit(text, formatting_entities=ent, buttons=buttons)
+        await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
     else:
-        await event.reply(text, formatting_entities=ent, buttons=buttons)
+        await event.reply(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
  
  
 # =================================================================================
@@ -493,7 +574,7 @@ async def on_menu_extract(event):
         "(ایموجی‌های معمولی کد ندارن)\n\n"
         "🎙  چند ایموجی هم می‌تونی یکجا بفرستی"
     )
-    await event.edit(text, buttons=[
+    await edit_deco(event, text, buttons=[
         [Button.inline("🎁 استخراج از لینک پک", b"extract_pack")],
         [Button.inline("🔙 بازگشت", b"back_main")],
     ])
@@ -565,7 +646,7 @@ async def on_pack_link_input(event):
         chunk_docs = docs[i:i + CHUNK]
         text, entities, idx = build_numbered_chunk(chunk_docs, idx)
         try:
-            await client.send_message(event.chat_id, text, formatting_entities=entities)
+            await client.send_message(event.chat_id, text, formatting_entities=entities, parse_mode=None)
         except Exception as e:
             await event.reply(f"❌ خطا در ارسال بخشی از نتایج: {e}")
         await asyncio.sleep(0.3)
@@ -599,15 +680,30 @@ def render_my_emojis_page(user_id, page=0):
     page = max(0, min(page, total_pages - 1))
     page_rows = rows[page * PAGE_SIZE: (page + 1) * PAGE_SIZE]
  
-    text = f"⭐  ایموجی‌های ذخیره‌شده: {total}/{limit_txt}\n" + "─" * 18 + "\n"
+    text = f"⭐  ایموجی‌های ذخیره‌شده: {total}/{limit_txt}\n" + "─" * 18 + "\n\n"
     entities = []
+
     if not page_rows:
-        text += "\nهنوز ایموجی‌ای ذخیره نکردی."
+        text += "هنوز ایموجی‌ای ذخیره نکردی."
+    else:
+        # لیست واقعی ایموجی‌های ذخیره‌شده‌ی همین صفحه، همراه با خودِ ایموجی پرمیوم
+        # (این کار فقط در متن پیام ممکن است؛ دکمه‌های inline توانایی حمل این entity را ندارند)
+        for i, r in enumerate(page_rows, start=1):
+            alt = r["alt"] if r["alt"] else FALLBACK
+            text += f"{i}. "
+            offset = utf16_len(text)
+            entities.append(types.MessageEntityCustomEmoji(
+                offset=offset, length=utf16_len(alt), document_id=r["doc_id"],
+            ))
+            text += f"{alt}  {r['name']}\n"
  
     buttons = []
     for r in page_rows:
+        alt = r["alt"] if r["alt"] else FALLBACK
+        # توجه: تلگرام اجازه نمی‌دهد برچسبِ دکمه‌ها entity داشته باشند، پس این‌جا فقط
+        # می‌توانیم گلیفِ ساده‌ی fallback ایموجی را نشان دهیم، نه خودِ ایموجی پرمیوم واقعی.
         buttons.append([
-            Button.inline(f"{r['name']}", f"noop".encode()),
+            Button.inline(f"{alt} {r['name']}", f"noop".encode()),
             Button.inline("🗑 حذف", f"del_emoji_{r['id']}".encode()),
         ])
  
@@ -625,7 +721,7 @@ def render_my_emojis_page(user_id, page=0):
 async def on_my_emojis(event):
     await event.answer()
     text, ent, buttons = render_my_emojis_page(event.sender_id, 0)
-    await event.edit(text, formatting_entities=ent, buttons=buttons)
+    await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
  
  
 @client.on(events.CallbackQuery(pattern=b"myemo_page_(\\d+)"))
@@ -633,7 +729,7 @@ async def on_my_emojis_page(event):
     await event.answer()
     page = int(event.pattern_match.group(1))
     text, ent, buttons = render_my_emojis_page(event.sender_id, page)
-    await event.edit(text, formatting_entities=ent, buttons=buttons)
+    await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
  
  
 @client.on(events.CallbackQuery(pattern=b"del_emoji_(\\d+)"))
@@ -642,7 +738,7 @@ async def on_del_emoji(event):
     delete_saved_emoji(row_id, event.sender_id)
     await event.answer("🗑 حذف شد")
     text, ent, buttons = render_my_emojis_page(event.sender_id, 0)
-    await event.edit(text, formatting_entities=ent, buttons=buttons)
+    await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
  
  
 @client.on(events.CallbackQuery(data=b"noop"))
@@ -666,20 +762,30 @@ async def on_add_emoji_start(event):
  
 @client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_add_emoji_id"))
 async def on_add_emoji_id_input(event):
-    doc_ids = extract_entities_from_message(event)
-    if not doc_ids:
-        doc_ids = parse_codes_from_text(event.raw_text or "")
-    if not doc_ids:
+    pairs = extract_emojis_with_alt(event)
+    if not pairs:
+        codes = parse_codes_from_text(event.raw_text or "")
+        pairs = [(c, FALLBACK) for c in codes]
+    if not pairs:
         await event.reply("⚠️ ایموجی پرمیوم یا کد معتبری پیدا نشد. دوباره امتحان کن.")
         return
-    pending[event.sender_id] = {"action": "await_add_emoji_name", "doc_id": doc_ids[0]}
-    await event.reply("🎙 حالا یک اسم دلخواه برای این ایموجی بفرست (یا «پیش‌فرض» بزن):")
+ 
+    doc_id, alt = pairs[0]
+    # فقط وارد state «منتظر اسم» می‌شویم؛ هنوز هیچ‌چیزی در دیتابیس ذخیره نمی‌شود
+    # تا زمانی که کاربر اسم دلخواه را در پیام بعدی بفرستد.
+    pending[event.sender_id] = {"action": "await_add_emoji_name", "doc_id": doc_id, "alt": alt}
+    ent = [types.MessageEntityCustomEmoji(offset=0, length=utf16_len(alt), document_id=doc_id)]
+    await event.reply(f"{alt}  حالا یک اسم دلخواه برای این ایموجی بفرست (یا «پیش‌فرض» بزن):",
+                       formatting_entities=ent, parse_mode=None)
  
  
 @client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_add_emoji_name"))
 async def on_add_emoji_name_input(event):
+    # این هندلر تنها زمانی اجرا می‌شود که پیام بعدی (اسم) واقعاً رسیده باشد؛
+    # یعنی ذخیره‌سازی همیشه *بعد* از دریافت اسم اتفاق می‌افتد، نه قبل از آن.
     state = pending.pop(event.sender_id)
     doc_id = state["doc_id"]
+    alt = state.get("alt", FALLBACK)
     name = (event.raw_text or "").strip()
     if not name or name in ("پیش‌فرض", "پیشفرض"):
         name = f"ایموجی #{doc_id}"
@@ -689,9 +795,9 @@ async def on_add_emoji_name_input(event):
         await event.reply(f"⛔️ به سقف {limit} ایموجی رسیدی.")
         return
  
-    add_saved_emoji(event.sender_id, name, doc_id)
-    ent = [types.MessageEntityCustomEmoji(offset=0, length=1, document_id=doc_id)]
-    await event.reply(f"{FALLBACK} «{name}» ذخیره شد ✅", formatting_entities=ent,
+    add_saved_emoji(event.sender_id, name, doc_id, alt)
+    ent = [types.MessageEntityCustomEmoji(offset=0, length=utf16_len(alt), document_id=doc_id)]
+    await event.reply(f"{alt} «{name}» ذخیره شد ✅", formatting_entities=ent, parse_mode=None,
                        buttons=[[Button.inline("⭐ ایموجی‌های من", b"menu_my_emojis")]])
  
  
@@ -725,7 +831,7 @@ async def on_menu_account(event):
         f"\n◁ کاربر: {kind}"
         f"\n📈 ایموجی‌های ذخیره‌شده: {count}/{limit_txt}"
     )
-    await event.edit(text, buttons=account_menu_buttons())
+    await edit_deco(event, text, buttons=account_menu_buttons())
  
  
 @client.on(events.CallbackQuery(data=b"my_stats"))
@@ -738,7 +844,7 @@ async def on_my_stats(event):
         f"\n\n⭐ تعداد ایموجی ذخیره‌شده: {count}"
         f"\n📋 تعداد کانال‌های ثبت‌شده: {channels}"
     )
-    await event.edit(text, buttons=[[Button.inline("🔙 بازگشت", b"menu_account")]])
+    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"menu_account")]])
  
  
 @client.on(events.CallbackQuery(data=b"my_set"))
@@ -754,7 +860,7 @@ async def on_my_set(event):
         f"\n◁ کد ست: {code}"
         f"\n\n🎙  دوستت این لینک رو باز کنه تا کل ست رو یکجا بگیره:\n{link}"
     )
-    await event.edit(text, buttons=[
+    await edit_deco(event, text, buttons=[
         [Button.inline("⭐ کپی لینک", f"copy_set_{code}".encode())],
         [Button.inline("🔙 بازگشت", b"menu_account")],
     ])
@@ -784,7 +890,7 @@ async def on_menu_channels(event):
     else:
         text += "\n" + "\n".join(f"◁ {c['title'] or c['channel_id']}" for c in chans)
  
-    await event.edit(text, buttons=[
+    await edit_deco(event, text, buttons=[
         [Button.inline("✏️ افزودن کانال", b"add_channel_start")],
         [Button.inline("🔙 بازگشت", b"menu_account")],
     ])
@@ -803,7 +909,7 @@ async def on_add_channel_start(event):
         f"🎙  کانال باید حداقل {CHANNEL_MIN_MEMBERS} عضو داشته باشد.\n\n"
         "📨  سپس آیدی عددی یا یوزرنیم کانال را بفرستید:\nمثل @my_channel یا -1001234567890"
     )
-    await event.edit(text, buttons=[[Button.inline("🔙 بازگشت", b"menu_channels")]])
+    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"menu_channels")]])
  
  
 @client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_channel_id"))
@@ -860,7 +966,16 @@ async def on_channel_post(event):
         return
  
     try:
-        await client.edit_message(chat, event.message.id, text, formatting_entities=entities)
+        # نکته‌ی مهم: parse_mode باید صراحتاً None باشد وگرنه Telethon سعی می‌کند متن را
+        # دوباره با پارسر پیش‌فرض (مثلا مارک‌داون) تفسیر کند و entityهای دستی‌ای که خودمان
+        # برای هر آیدی جداگانه ساختیم را نادیده می‌گیرد؛ نتیجه‌اش این بود که فارغ از این‌که
+        # کاربر چه آیدی‌ای فرستاده، فقط همان کاراکتر ⭐ (ثابت در FALLBACK) به‌عنوان متن ساده
+        # باقی می‌ماند و هیچ ایموجی پرمیومی واقعی جایگزین نمی‌شد.
+        await client.edit_message(
+            chat, event.message.id, text,
+            formatting_entities=entities,
+            parse_mode=None,
+        )
     except Exception as e:
         print(f"channel auto-convert failed: {e}")
  
@@ -879,7 +994,7 @@ async def on_help(event):
         "3️⃣ در «ایموجی‌های من» می‌تونی ایموجی‌های پرکاربردت رو ذخیره کنی.\n\n"
         "4️⃣ با افزودن کانال، پست‌های حاوی کد به‌صورت خودکار تبدیل می‌شوند."
     )
-    await event.edit(text, buttons=[[Button.inline("🔙 بازگشت", b"back_main")]])
+    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"back_main")]])
  
  
 # =================================================================================
@@ -894,7 +1009,7 @@ async def on_support(event):
         "⚡ پیوی پشتیبانی:\nپیام خود را همینجا بفرست، پشتیبانی از طریق ربات پاسخ می‌دهد\n\n"
         "🕐 ارسال تیکت:\nپیام خود را ثبت کن تا پشتیبانی پاسخ دهد"
     )
-    await event.edit(text, buttons=[
+    await edit_deco(event, text, buttons=[
         [Button.inline("🦖 پیوی پشتیبانی", b"support_chat"), Button.inline("🖼 ارسال تیکت", b"support_ticket")],
         [Button.inline("🔙 بازگشت", b"back_main")],
     ])
@@ -994,7 +1109,7 @@ async def on_admin_stats(event):
         f"\n🎫 تیکت‌های باز: {s['open_tickets']}"
         f"\n🔓 کاربران نامحدود: {s['unlimited_users']}"
     )
-    await event.edit(text, buttons=[[Button.inline("🔙 بازگشت", b"admin_panel")]])
+    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"admin_panel")]])
  
  
 @client.on(events.CallbackQuery(data=b"admin_unlimit"))
