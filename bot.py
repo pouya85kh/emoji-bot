@@ -2,83 +2,74 @@ import os
 import re
 import json
 import sqlite3
-import asyncio
 import random
 import string
-import datetime
-from telethon import TelegramClient, events, Button
-from telethon.tl import types, functions
-from telethon.tl.types import UpdateBotInlineSend
-from telethon.errors import UserIsBlockedError, ChatWriteForbiddenError
- 
-# ================= تنظیمات =================
-API_ID    = int(os.environ["API_ID"])
-API_HASH  = os.environ["API_HASH"]
+from datetime import datetime
+from typing import Dict, Any, List
+
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.enums import ParseMode
+from aiogram.filters import Command, CommandObject
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    Message,
+    CallbackQuery,
+    InlineQuery,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    MessageEntity
+)
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+
+# ================= تنظیمات و محیط =================
 BOT_TOKEN = os.environ["BOT_TOKEN"]
- 
-ADMIN_IDS = {7049497099}          # آیدی عددی ادمین‌ها
-SUPPORT_USERNAME = "nooooofear"   # فقط جهت نمایش/رفرنس - دیگر پیوی مستقیم داده نمی‌شود
- 
-FALLBACK = "\u2b50"
- 
+ADMIN_IDS = {7049497099}  # آیدی عددی ادمین‌ها
+SUPPORT_USERNAME = "nooooofear"
+
+FALLBACK_EMOJI = "⭐"
 DEFAULT_EMOJI_LIMIT = 50
 CHANNEL_MIN_MEMBERS = 50
+
 PACK_LINK_RE = re.compile(r"(?:addemoji|addstickers)/([a-zA-Z0-9_]+)")
 CODE_RE = re.compile(r"\[(\d+)\]")
- 
-# مسیر دیتابیس - روی ریلوی حتما یک Volume به این مسیر وصل کن تا دیتا پاک نشود
 DB_PATH = os.environ.get("DB_PATH", "bot.db")
- 
-# =============================================================
-# آیدی عددی ایموجی‌های پرمیوم استفاده‌شده در متن‌های ربات.
-# !! این‌ها placeholder هستند (فعلا با DECO_EMOJI_ID پر شده‌اند) !!
-# حتما هرکدام را با آیدی واقعی ایموجی پرمیومی که مالک/دارای دسترسی به آن هستی جایگزین کن،
-# وگرنه ارسال آن پیام با خطا مواجه می‌شود.
-# =============================================================
-DECO_EMOJI_ID = 5057918405923832965
- 
-EMOJI = {
-    "rocket":      DECO_EMOJI_ID,  # 📈 خوش‌آمد / حساب کاربری
-    "telegram":    DECO_EMOJI_ID,  # ✈️ سرتیترهای مرتبط با پک/کانال
-    "star":        DECO_EMOJI_ID,  # ⭐ ایموجی پریمیوم / ست
-    "link":        DECO_EMOJI_ID,  # 🔗 استخراج کد ایموجی
-    "panel":       DECO_EMOJI_ID,  # 🖥 حساب من
-    "help":        DECO_EMOJI_ID,  # ❓ راهنما
-    "mail":        DECO_EMOJI_ID,  # ✉️ پشتیبانی
-    "gem":         DECO_EMOJI_ID,  # 💎 پشتیبانی هدر
-    "bolt":        DECO_EMOJI_ID,  # ⚡ نکات/دسترسی‌ها
-    "note":        DECO_EMOJI_ID,  # 📝 توضیحات
-    "mic":         DECO_EMOJI_ID,  # 🎙 نکات فرعی
-    "gift":        DECO_EMOJI_ID,  # 🎁 استخراج از لینک پک
-    "chart":       DECO_EMOJI_ID,  # 📊 آمار
-    "folder":      DECO_EMOJI_ID,  # 📋 کانال‌های من
-    "check":       DECO_EMOJI_ID,  # ✅ تایید / ست آماده شد
-    "gear":        DECO_EMOJI_ID,  # ⌘ کانال‌های من هدر
-    "pencil":      DECO_EMOJI_ID,  # ✏️ افزودن کانال / ایموجی
-    "dino":        DECO_EMOJI_ID,  # 🦖 پیوی پشتیبانی
-    "ticket":      DECO_EMOJI_ID,  # 🖼 ارسال تیکت
-    "back":        DECO_EMOJI_ID,  # 🔙 بازگشت / لغو / حذف
-}
- 
-SESSION_PATH = os.environ.get("SESSION_PATH", "/data/bot")
 
-client = TelegramClient(
-    SESSION_PATH,
-    API_ID,
-    API_HASH
-).start(bot_token=BOT_TOKEN)
- 
-# حافظه موقت برای مراحل چندپیامی (state هر کاربر)
-pending = {}   # user_id -> dict(action=..., **extra)
- 
-# =================================================================================
-# دیتابیس
-# =================================================================================
-_db_lock = asyncio.Lock()
+# آیدی ایموجی‌های پرمیوم پیش‌فرض برای دکوراسیون منوها (حتماً با آیدی‌های واقعی جایگزین شود)
+DECO_EMOJI_ID = "5057918405923832965"
+
+EMOJI_IDS = {
+    "rocket": DECO_EMOJI_ID,
+    "telegram": DECO_EMOJI_ID,
+    "star": DECO_EMOJI_ID,
+    "link": DECO_EMOJI_ID,
+    "panel": DECO_EMOJI_ID,
+    "help": DECO_EMOJI_ID,
+    "mail": DECO_EMOJI_ID,
+    "gem": DECO_EMOJI_ID,
+    "bolt": DECO_EMOJI_ID,
+    "note": DECO_EMOJI_ID,
+    "mic": DECO_EMOJI_ID,
+    "gift": DECO_EMOJI_ID,
+    "chart": DECO_EMOJI_ID,
+    "folder": DECO_EMOJI_ID,
+    "check": DECO_EMOJI_ID,
+    "gear": DECO_EMOJI_ID,
+    "pencil": DECO_EMOJI_ID,
+    "dino": DECO_EMOJI_ID,
+    "ticket": DECO_EMOJI_ID,
+    "back": DECO_EMOJI_ID,
+    "lang": DECO_EMOJI_ID,
+    "trash": DECO_EMOJI_ID
+}
+
+# ================= دیتابیس SQLITE =================
 _conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 _conn.row_factory = sqlite3.Row
- 
- 
+
 def db_init():
     cur = _conn.cursor()
     cur.executescript("""
@@ -89,14 +80,14 @@ def db_init():
         emoji_limit INTEGER DEFAULT 50,
         unlimited INTEGER DEFAULT 0,
         set_code TEXT,
+        lang TEXT DEFAULT 'fa',
         joined_at TEXT
     );
     CREATE TABLE IF NOT EXISTS saved_emojis(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         name TEXT,
-        doc_id INTEGER,
-        alt TEXT
+        doc_id TEXT
     );
     CREATE TABLE IF NOT EXISTS channels(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,72 +104,62 @@ def db_init():
     );
     """)
     _conn.commit()
-    # مهاجرت برای دیتابیس‌های قدیمی‌تری که هنوز ستون alt را ندارند
-    try:
-        cur.execute("ALTER TABLE saved_emojis ADD COLUMN alt TEXT")
-        _conn.commit()
-    except sqlite3.OperationalError:
-        pass
-
 
 db_init()
- 
- 
-def ensure_user(user_id, first_name=None, username=None):
+
+def ensure_user(user_id: int, first_name: str = None, username: str = None):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     row = cur.fetchone()
     if row is None:
         cur.execute(
-            "INSERT INTO users(user_id, first_name, username, emoji_limit, unlimited, joined_at) VALUES(?,?,?,?,?,?)",
-            (user_id, first_name, username, DEFAULT_EMOJI_LIMIT, 0, datetime.datetime.utcnow().isoformat()),
+            "INSERT INTO users(user_id, first_name, username, emoji_limit, unlimited, lang, joined_at) VALUES(?,?,?,?,?,?,?)",
+            (user_id, first_name, username, DEFAULT_EMOJI_LIMIT, 0, 'fa', datetime.utcnow().isoformat()),
         )
         _conn.commit()
     else:
         cur.execute("UPDATE users SET first_name=?, username=? WHERE user_id=?", (first_name, username, user_id))
         _conn.commit()
- 
- 
-def get_user(user_id):
+
+def get_user(user_id: int):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     return cur.fetchone()
- 
- 
-def user_emoji_count(user_id):
+
+def set_user_lang(user_id: int, lang: str):
+    cur = _conn.cursor()
+    cur.execute("UPDATE users SET lang=? WHERE user_id=?", (lang, user_id))
+    _conn.commit()
+
+def user_emoji_count(user_id: int) -> int:
     cur = _conn.cursor()
     cur.execute("SELECT COUNT(*) c FROM saved_emojis WHERE user_id=?", (user_id,))
     return cur.fetchone()["c"]
- 
- 
-def user_limit(user_id):
+
+def user_limit(user_id: int):
     u = get_user(user_id)
     if u is None:
         return DEFAULT_EMOJI_LIMIT
     if u["unlimited"]:
-        return None  # نامحدود
+        return None
     return u["emoji_limit"]
- 
- 
-def add_saved_emoji(user_id, name, doc_id, alt=None):
+
+def add_saved_emoji(user_id: int, name: str, doc_id: str):
     cur = _conn.cursor()
-    cur.execute("INSERT INTO saved_emojis(user_id, name, doc_id, alt) VALUES(?,?,?,?)", (user_id, name, doc_id, alt))
+    cur.execute("INSERT INTO saved_emojis(user_id, name, doc_id) VALUES(?,?,?)", (user_id, name, str(doc_id)))
     _conn.commit()
- 
- 
-def list_saved_emojis(user_id):
+
+def list_saved_emojis(user_id: int):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM saved_emojis WHERE user_id=? ORDER BY id", (user_id,))
     return cur.fetchall()
- 
- 
-def delete_saved_emoji(row_id, user_id):
+
+def delete_saved_emoji(row_id: int, user_id: int):
     cur = _conn.cursor()
     cur.execute("DELETE FROM saved_emojis WHERE id=? AND user_id=?", (row_id, user_id))
     _conn.commit()
- 
- 
-def get_or_create_set_code(user_id):
+
+def get_or_create_set_code(user_id: int) -> str:
     u = get_user(user_id)
     if u and u["set_code"]:
         return u["set_code"]
@@ -187,15 +168,13 @@ def get_or_create_set_code(user_id):
     cur.execute("UPDATE users SET set_code=? WHERE user_id=?", (code, user_id))
     _conn.commit()
     return code
- 
- 
-def find_user_by_set_code(code):
+
+def find_user_by_set_code(code: str):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM users WHERE set_code=?", (code,))
     return cur.fetchone()
- 
- 
-def add_channel(user_id, channel_id, title):
+
+def add_channel(user_id: int, channel_id: int, title: str) -> bool:
     cur = _conn.cursor()
     cur.execute("SELECT id FROM channels WHERE channel_id=?", (str(channel_id),))
     if cur.fetchone():
@@ -203,974 +182,862 @@ def add_channel(user_id, channel_id, title):
     cur.execute("INSERT INTO channels(user_id, channel_id, title) VALUES(?,?,?)", (user_id, str(channel_id), title))
     _conn.commit()
     return True
- 
- 
-def list_channels(user_id):
+
+def list_channels(user_id: int):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM channels WHERE user_id=?", (user_id,))
     return cur.fetchall()
- 
- 
-def is_registered_channel(channel_id):
+
+def is_registered_channel(channel_id: int):
     cur = _conn.cursor()
     cur.execute("SELECT * FROM channels WHERE channel_id=?", (str(channel_id),))
     return cur.fetchone()
- 
- 
-def add_ticket(user_id, message):
+
+def add_ticket(user_id: int, message: str):
     cur = _conn.cursor()
     cur.execute(
         "INSERT INTO tickets(user_id, message, status, created_at) VALUES(?,?,?,?)",
-        (user_id, message, "open", datetime.datetime.utcnow().isoformat()),
+        (user_id, message, "open", datetime.utcnow().isoformat()),
     )
     _conn.commit()
- 
- 
-def stats():
+
+def db_stats():
     cur = _conn.cursor()
     cur.execute("SELECT COUNT(*) c FROM users")
-    users_count = cur.fetchone()["c"]
+    u_count = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM saved_emojis")
-    emojis_count = cur.fetchone()["c"]
+    e_count = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM channels")
-    channels_count = cur.fetchone()["c"]
+    c_count = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM tickets WHERE status='open'")
-    open_tickets = cur.fetchone()["c"]
+    o_tickets = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM users WHERE unlimited=1")
-    unlimited_users = cur.fetchone()["c"]
-    return {
-        "users": users_count,
-        "emojis": emojis_count,
-        "channels": channels_count,
-        "open_tickets": open_tickets,
-        "unlimited_users": unlimited_users,
-    }
- 
- 
+    unlim = cur.fetchone()["c"]
+    return {"users": u_count, "emojis": e_count, "channels": c_count, "open_tickets": o_tickets, "unlimited_users": unlim}
+
 def all_user_ids():
     cur = _conn.cursor()
     cur.execute("SELECT user_id FROM users")
     return [r["user_id"] for r in cur.fetchall()]
- 
- 
-# =================================================================================
-# ابزارهای عمومی
-# =================================================================================
-def utf16_len(text: str) -> int:
-    return len(text.encode("utf-16-le")) // 2
- 
- 
-def emo(key: str, length: int = 1):
-    """یک MessageEntityCustomEmoji برای درج در ابتدای متن با آفست مشخص می‌سازد."""
-    return types.MessageEntityCustomEmoji(offset=0, length=length, document_id=EMOJI[key])
- 
- 
-def with_deco(key: str, text: str):
-    """متن را با یک ایموجی پرمیوم در ابتدا و یک اینتیتی مربوطه برمی‌گرداند."""
-    full_text = FALLBACK + "  " + text
-    ent = types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI[key])
-    return full_text, [ent]
- 
- 
-def doc_alt(doc) -> str:
-    for attr in doc.attributes:
-        if isinstance(attr, types.DocumentAttributeCustomEmoji):
-            return attr.alt or FALLBACK
-    return FALLBACK
- 
- 
-def extract_entities_from_message(event):
-    """آیدی ایموجی‌های پرمیوم موجود در خودِ پیام (اگر کاربر ایموجی واقعی فرستاده باشد) را برمی‌گرداند."""
-    ids = []
-    if event.message and event.message.entities:
-        for e in event.message.entities:
-            if isinstance(e, types.MessageEntityCustomEmoji):
-                ids.append(e.document_id)
-    return ids
- 
- 
-def parse_codes_from_text(text):
-    return [int(m.group(1)) for m in CODE_RE.finditer(text)]
 
 
-def extract_emojis_with_alt(event):
-    """
-    برخلاف extract_entities_from_message، این تابع برای هر ایموجی پرمیومی که کاربر واقعاً
-    در پیام فرستاده، هم document_id و هم گلیف واقعی (alt) را برمی‌گرداند. گلیف واقعی همان
-    کاراکتری‌ست که زیر entity قرار دارد و توسط کلاینت‌های بدون رندر (یا در حالت fallback) نشان
-    داده می‌شود؛ بدون این، هر ایموجی هنگام ذخیره یا نمایش با یک ستاره‌ی یکسان جایگزین می‌شود.
-    """
-    result = []
-    if event.message and event.message.entities and event.raw_text:
-        text16 = event.raw_text.encode("utf-16-le")
-        for e in event.message.entities:
-            if isinstance(e, types.MessageEntityCustomEmoji):
-                start = e.offset * 2
-                end = start + e.length * 2
-                try:
-                    alt = text16[start:end].decode("utf-16-le")
-                except Exception:
-                    alt = FALLBACK
-                result.append((e.document_id, alt or FALLBACK))
-    return result
-
-
-# =================================================================================
-# جایگزینی خودکار ایموجی‌های معمولی متن با ایموجی‌های پرمیوم متناظر
-# توجه مهم: این تابع فقط برای متنِ پیام‌ها کار می‌کند. تلگرام به دکمه‌های inline
-# اجازه‌ی حمل هیچ entity‌ای (نه ایموجی پرمیوم و نه رنگ) را نمی‌دهد، بنابراین برچسبِ
-# دکمه‌ها همیشه باید همان کاراکترهای یونیکد ساده باقی بمانند.
-# =================================================================================
-UNICODE_EMOJI_MAP = {
-    "🚀": "rocket", "✈️": "telegram", "⭐": "star", "🔗": "link", "🖥": "panel",
-    "❓": "help", "✉️": "mail", "💎": "gem", "⚡": "bolt", "📝": "note",
-    "🎙": "mic", "🎁": "gift", "📊": "chart", "📋": "folder", "✅": "check",
-    "⌘": "gear", "✏️": "pencil", "🦖": "dino", "🖼": "ticket", "🔙": "back",
-    "📈": "rocket", "📨": "mail", "🔷": "bolt", "🎉": "gift", "📤": "link",
-    "🅰": "note", "🔓": "check", "📢": "mail", "⏳": "bolt",
+# ================= ترجمه و محلی‌سازی (Localization) =================
+STRINGS = {
+    "fa": {
+        "welcome": "خوش آمدید {}!\n─\nبا این ربات می‌توانید ایموجی‌های پرمیوم را در هر چتی ارسال کنید.\nمنوی زیر را انتخاب کنید:",
+        "menu_premium": "✨ ارسال ایموجی پرمیوم",
+        "menu_extract": "🔗 استخراج کد ایموجی",
+        "menu_account": "🖥 حساب من",
+        "menu_help": "❓ راهنما",
+        "menu_support": "✉️ پشتیبانی",
+        "admin_panel": "⚙️ پنل مدیریت",
+        "back": "🔙 بازگشت",
+        "lang_select": "🌐 لطفا زبان خود را انتخاب کنید / Please select your language:",
+        "invalid_set": "⚠️ کد ست معتبر نیست یا منقضی شده.",
+        "set_added": "✅ {} ایموجی از ست دریافتی به حساب شما اضافه شد.",
+        "premium_section": "✨ ارسال ایموجی پرمیوم\n─\nیک پیام جدید در همین چت بفرستید:\n⚡ چند ایموجی پرمیوم بفرستید یا کد عددی وارد کنید:\n`[5792080508976373427]`",
+        "inline_btn": "✨ رفتن به حالت اینلاین",
+        "extract_section": "📤 استخراج کد ایموجی پرمیوم\n─\nیک یا چند ایموجی پرمیوم برای من بفرستید:",
+        "extract_pack_btn": "🎁 استخراج از لینک پک",
+        "await_pack": "🎁 لینک پک ایموجی پرمیوم را بفرستید:\nمثال: `https://t.me/addemoji/PackName`",
+        "invalid_pack": "⚠️ لینک معتبر پک ایموجی نیست.",
+        "fetching_pack": "⏳ در حال دریافت پک...",
+        "pack_empty": "⚠️ پک خالی است یا معتبر نیست.",
+        "pack_success": "✅ استخراج {} ایموجی از پک انجام شد.",
+        "my_emojis_title": "⭐ ایموجی‌های ذخیره‌شده: {}/{}",
+        "no_emojis": "هنوز ایموجی‌ای ذخیره نکردید.",
+        "add_emoji_btn": "✏️ افزودن ایموجی",
+        "limit_reached": "⛔️ به سقف ذخیره‌سازی رسیده‌اید.",
+        "send_emoji_prompt": "✏️ ایموجی پرمیوم مورد نظر یا کد آن را بفرستید:",
+        "send_name_prompt": "🎙 حالا یک اسم دلخواه برای این ایموجی بفرستید:",
+        "saved_success": "«{}» ذخیره شد ✅",
+        "account_txt": "💠 حساب کاربری شما\n─\n◁ آیدی: {}\n◁ نام: {}\n◁ زبان: {}\n◁ نوع کاربری: {}\n📈 ذخیره‌شده: {}/{}",
+        "stats_btn": "📊 آمار من",
+        "set_btn": "⭐ اشتراک ست من",
+        "change_lang_btn": "🌐 تغییر زبان / Change Lang",
+        "my_stats_txt": "📊 آمار شما\n─\n⭐ تعداد ایموجی: {}\n📋 تعداد کانال‌ها: {}",
+        "my_set_txt": "✅ ست شما آماده اشتراک شد!\n─\n◁ کد ست: {}\n دوست شما این لینک را باز کند تا ست را دریافت کند:\n{}",
+        "copy_btn": "⭐ کپی لینک",
+        "channels_txt": "⌘ کانال‌های من\n─\nپست‌های حاوی کد به صورت خودکار تبدیل می‌شوند.\n\n",
+        "no_channels": "◁ هنوز کانالی ثبت نکردید.",
+        "add_channel_btn": "✏️ افزودن کانال",
+        "add_channel_prompt": "✈️ افزودن کانال\n─\nربات را در کانال خود ادمین کنید و آیدی یا یوزرنیم آن را بفرستید:\nمثل @my_channel",
+        "channel_not_found": "❌ کانال پیدا نشد.",
+        "channel_invalid": "⚠️ این یک کانال معتبر نیست.",
+        "channel_limit_err": "⚠️ کانال باید حداقل {} عضو داشته باشد.",
+        "channel_admin_err": "⚠️ ربات باید دسترسی ویرایش پیام را داشته باشد.",
+        "channel_dup": "⚠️ این کانال قبلا ثبت شده است.",
+        "channel_success": "✅ کانال با موفقیت ثبت شد.",
+        "help_txt": "❓ راهنمای ربات\n─\n1️⃣ برای ارسال اینلاین:\n`@bot_username text [code]`\n2️⃣ ارسال لینک پک برای استخراج\n3️⃣ دکمه زیر برای ساخت پک‌های شخصی کاربرد دارد:",
+        "support_txt": "💎 پشتیبانی\n─\nروش ارتباطی خود را انتخاب کنید:",
+        "support_chat_btn": "🦖 پیوی پشتیبانی",
+        "support_ticket_btn": "🖼 ارسال تیکت",
+        "support_prompt": "📨 پیام خود را بنویسید تا برای پشتیبانی ارسال شود:",
+        "support_sent": "✅ پیام شما برای پشتیبانی ارسال شد.",
+        "ticket_prompt": "🖼 متن تیکت خود را بنویسید:",
+        "ticket_sent": "✅ تیکت شما ثبت شد."
+    },
+    "en": {
+        "welcome": "Welcome {}!\n─\nWith this bot, you can send premium emojis in any chat.\nSelect from the menu below:",
+        "menu_premium": "✨ Send Premium Emoji",
+        "menu_extract": "🔗 Extract Emoji Code",
+        "menu_account": "🖥 My Account",
+        "menu_help": "❓ Help",
+        "menu_support": "✉️ Support",
+        "admin_panel": "⚙️ Admin Panel",
+        "back": "🔙 Back",
+        "lang_select": "🌐 Please select your language / لطفا زبان خود را انتخاب کنید:",
+        "invalid_set": "⚠️ Invalid or expired set code.",
+        "set_added": "✅ Added {} emojis from the shared set to your account.",
+        "premium_section": "✨ Send Premium Emoji\n─\nSend a new message in this chat:\n⚡ Send premium emojis or use numeric code:\n`[5792080508976373427]`",
+        "inline_btn": "✨ Go Inline Mode",
+        "extract_section": "📤 Extract Premium Emoji Code\n─\nSend one or multiple premium emojis to me:",
+        "extract_pack_btn": "🎁 Extract from Pack Link",
+        "await_pack": "🎁 Send the premium emoji pack link:\nExample: `https://t.me/addemoji/PackName`",
+        "invalid_pack": "⚠️ Invalid pack link.",
+        "fetching_pack": "⏳ Fetching pack details...",
+        "pack_empty": "⚠️ Pack is empty or invalid.",
+        "pack_success": "✅ Successfully extracted {} emojis from the pack.",
+        "my_emojis_title": "⭐ Saved Emojis: {}/{}",
+        "no_emojis": "You haven't saved any emojis yet.",
+        "add_emoji_btn": "✏️ Add Emoji",
+        "limit_reached": "⛔️ Storage limit reached.",
+        "send_emoji_prompt": "✏️ Send the premium emoji or its code:",
+        "send_name_prompt": "🎙 Now enter a custom name for this emoji:",
+        "saved_success": "«{}» Saved successfully ✅",
+        "account_txt": "💠 Your Account\n─\n◁ ID: {}\n◁ Name: {}\n◁ Lang: {}\n◁ Type: {}\n📈 Saved: {}/{}",
+        "stats_btn": "📊 My Stats",
+        "set_btn": "⭐ Share My Set",
+        "change_lang_btn": "🌐 Change Language",
+        "my_stats_txt": "📊 Your Stats\n─\n⭐ Emojis: {}\n📋 Channels: {}",
+        "my_set_txt": "✅ Your set is ready to share!\n─\n◁ Set Code: {}\n Your friend can open this link to get the entire set:\n{}",
+        "copy_btn": "⭐ Copy Link",
+        "channels_txt": "⌘ My Channels\n─\nPosts with codes will be converted automatically.\n\n",
+        "no_channels": "◁ No channels registered yet.",
+        "add_channel_btn": "✏️ Add Channel",
+        "add_channel_prompt": "✈️ Add Channel\n─\nPromote the bot to admin in your channel and send its ID or Username:\nE.g., @my_channel",
+        "channel_not_found": "❌ Channel not found.",
+        "channel_invalid": "⚠️ Not a valid channel.",
+        "channel_limit_err": "⚠️ Channel must have at least {} members.",
+        "channel_admin_err": "⚠️ Bot needs 'Edit Messages' permission.",
+        "channel_dup": "⚠️ This channel is already registered.",
+        "channel_success": "✅ Channel registered successfully.",
+        "help_txt": "❓ Bot Help Guide\n─\n1️⃣ To send inline:\n`@bot_username text [code]`\n2️⃣ Send pack link to extract codes.\n3️⃣ Use the button below to easily build your own custom packs:",
+        "support_txt": "💎 Support\n─\nChoose your communication method:",
+        "support_chat_btn": "🦖 Support PM",
+        "support_ticket_btn": "🖼 Submit Ticket",
+        "support_prompt": "📨 Write your message to send directly to support:",
+        "support_sent": "✅ Message sent to support team.",
+        "ticket_prompt": "🖼 Write your ticket description:",
+        "ticket_sent": "✅ Ticket submitted successfully."
+    }
 }
 
+def get_txt(user_id: int, key: str) -> str:
+    u = get_user(user_id)
+    lang = u["lang"] if u else "fa"
+    return STRINGS.get(lang, STRINGS["fa"]).get(key, STRINGS["fa"][key])
 
-def premiumize(text: str):
-    """
-    هر ایموجی معمولی شناخته‌شده در متن را نگه می‌دارد ولی یک MessageEntityCustomEmoji
-    متناظر رویش می‌گذارد تا در کلاینت به‌صورت ایموجی پرمیوم رندر شود.
-    خروجی: (متن بدون تغییر ظاهری، لیست entityها)
-    """
-    entities = []
-    out = ""
-    i = 0
-    n = len(text)
-    while i < n:
-        matched = False
-        for ch, key in UNICODE_EMOJI_MAP.items():
-            if text.startswith(ch, i):
-                offset = utf16_len(out)
-                out += ch
-                entities.append(types.MessageEntityCustomEmoji(
-                    offset=offset, length=utf16_len(ch), document_id=EMOJI[key],
-                ))
-                i += len(ch)
-                matched = True
-                break
-        if not matched:
-            out += text[i]
-            i += 1
-    return out, entities
- 
- 
-async def edit_deco(event, text, buttons):
-    """میانبر برای ویرایش پیام‌ای که تمام ایموجی‌های معمولی شناخته‌شده‌ی متنش
-    باید به ایموجی پرمیوم تبدیل شوند (دکمه‌ها همچنان یونیکد ساده باقی می‌مانند)."""
-    text2, ent = premiumize(text)
-    await event.edit(text2, formatting_entities=ent, buttons=buttons, parse_mode=None)
- 
- 
-async def safe_send(user_id, *args, **kwargs):
-    try:
-        await client.send_message(user_id, *args, **kwargs)
-        return True
-    except (UserIsBlockedError, ChatWriteForbiddenError):
-        return False
-    except Exception as e:
-        print(f"send to {user_id} failed: {e}")
-        return False
- 
- 
-# =================================================================================
-# منوها (کیبوردها)
-# توجه: تلگرام رنگ اختصاصی هر دکمه‌ی inline را پشتیبانی نمی‌کند، همه‌ی دکمه‌ها
-# با تم پیش‌فرض کلاینت کاربر نمایش داده می‌شوند و از این نظر محدودیتی در بات نیست.
-# =================================================================================
-def main_menu_buttons(user_id):
-    rows = [
-        [Button.inline("⭐ ایموجی پریمیوم", b"menu_premium"), Button.inline("🔗 استخراج کد ایموجی", b"menu_extract")],
-        [Button.inline("🖥 حساب من", b"menu_account"), Button.inline("❓ راهنما", b"menu_help")],
-        [Button.inline("✉️ پشتیبانی", b"menu_support")],
+# ================= اینتیتی ایموجی پریمیوم ایاگرام =================
+def make_premium_text(text: str, emoji_key: str) -> tuple:
+    """یک متن به همراه اینتیتی ایموجی سفارشی متحرک ایجاد می‌کند."""
+    full_text = f"🧬 {text}" # 🧬 به عنوان فال‌بک رندر محلی چت
+    entity = MessageEntity(
+        type="custom_emoji",
+        offset=0,
+        length=2,
+        custom_emoji_id=EMOJI_IDS.get(emoji_key, DECO_EMOJI_ID)
+    )
+    return full_text, [entity]
+
+# ================= ایاگرام ستاپ =================
+bot = Bot(token=BOT_TOKEN, default_auth_date_format=None)
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+
+class BotStates(StatesGroup):
+    await_lang = State()
+    await_pack_link = State()
+    await_add_emoji_id = State()
+    await_add_emoji_name = State()
+    await_channel_id = State()
+    await_support_msg = State()
+    await_ticket_msg = State()
+    admin_unlimit_target = State()
+    admin_broadcast_msg = State()
+
+# ================= کیبوردهای منوی اصلی =================
+def get_main_menu(user_id: int) -> InlineKeyboardMarkup:
+    ensure_user(user_id)
+    btn_premium = InlineKeyboardButton(text=get_txt(user_id, "menu_premium"), callback_data="menu_premium")
+    btn_extract = InlineKeyboardButton(text=get_txt(user_id, "menu_extract"), callback_data="menu_extract")
+    btn_account = InlineKeyboardButton(text=get_txt(user_id, "menu_account"), callback_data="menu_account")
+    btn_help = InlineKeyboardButton(text=get_txt(user_id, "menu_help"), callback_data="menu_help")
+    btn_support = InlineKeyboardButton(text=get_txt(user_id, "menu_support"), callback_data="menu_support")
+    
+    keyboard = [
+        [btn_premium, btn_extract],
+        [btn_account, btn_help],
+        [btn_support]
     ]
     if user_id in ADMIN_IDS:
-        rows.append([Button.inline("⚙️ پنل مدیریت", b"admin_panel")])
-    return rows
- 
- 
-async def send_main_menu(event, edit=False):
-    user = await event.get_sender()
-    name = user.first_name or "کاربر"
-    text = f"{FALLBACK}  خوش آمدید {name}!\n" + "─" * 18 + \
-           "\n\n📨  با این ربات می‌تونید ایموجی‌های پرمیوم رو\nدر هر چت تلگرامی ارسال کنید!" \
-           "\n\n🔖  از منوی زیر استفاده کنید:"
-    text, ent = premiumize(text)
-    ent.append(types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI["rocket"]))
-    buttons = main_menu_buttons(event.sender_id)
-    if edit:
-        await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
-    else:
-        await event.reply(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
- 
- 
-# =================================================================================
-# استارت + دیپ‌لینک اشتراک ست (start=set_XXXXXXX)
-# =================================================================================
-@client.on(events.NewMessage(pattern=r"/start(?:\s+(.+))?$", func=lambda e: e.is_private))
-async def on_start(event):
-    user = await event.get_sender()
-    ensure_user(event.sender_id, user.first_name, user.username)
- 
-    arg = event.pattern_match.group(1)
-    if arg and arg.startswith("set_"):
-        code = arg[len("set_"):]
+        keyboard.append([InlineKeyboardButton(text=get_txt(user_id, "admin_panel"), callback_data="admin_panel")])
+        
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+# ================= هندلرهای بیس / استارت =================
+@dp.message(Command("start"))
+async def cmd_start(message: Message, state: FSMContext, command: CommandObject):
+    user_id = message.from_user.id
+    ensure_user(user_id, message.from_user.first_name, message.from_user.username)
+    
+    # بررسی دیپ‌لینک اشتراک ست
+    if command.args and command.args.startswith("set_"):
+        code = command.args[4:]
         owner = find_user_by_set_code(code)
         if not owner:
-            await event.reply("⚠️ کد ست معتبر نیست یا منقضی شده.")
-        else:
-            src_emojis = list_saved_emojis(owner["user_id"])
-            limit = user_limit(event.sender_id)
-            added = 0
-            for row in src_emojis:
-                if limit is not None and user_emoji_count(event.sender_id) >= limit:
-                    break
-                add_saved_emoji(event.sender_id, row["name"], row["doc_id"])
-                added += 1
-            await event.reply(f"✅ {added} ایموجی از ست دریافتی به حساب شما اضافه شد.")
-        return
- 
-    await send_main_menu(event)
- 
- 
-@client.on(events.CallbackQuery(data=b"back_main"))
-async def on_back_main(event):
-    await event.answer()
-    await send_main_menu(event, edit=True)
- 
- 
-# =================================================================================
-# بخش «ایموجی پریمیوم» (حالت اینلاین)
-# =================================================================================
-@client.on(events.CallbackQuery(data=b"menu_premium"))
-async def on_menu_premium(event):
-    await event.answer()
-    text = (
-        "✨  ارسال ایموجی پرمیوم\n" + "─" * 18 +
-        "\n\n📝  یک پیام جدید در همین چت بفرست:\n\n"
-        "⚡  چند ایموجی پرمیوم (همه را یکجا بفرست)\n"
-        "یا کد عددی: [5792080508976373427]\n\n"
-        "🎙  چند کد را با فاصله یا براکت جدا کن:\n"
-        "[کد۱] [کد۲] [کد۳]\n\n"
-        "🎙  بعدش می‌تونی اسم دلخواه انتخاب کنی\n"
-        "(یا «پیش‌فرض» بزنی)"
-    )
-    await event.edit(
-        text,
-        buttons=[[Button.switch_inline("✨ رفتن به حالت اینلاین", query="", same_peer=False)],
-                 [Button.inline("🔙 بازگشت", b"back_main")]],
-    )
- 
- 
-@client.on(events.InlineQuery())
-async def on_inline(event):
-    query = event.text.strip()
-    b = event.builder
- 
-    if not query:
-        await event.answer([
-            b.article(
-                title="✨ ارسال ایموجی پرمیوم",
-                description="پیام خود را بنویسید...",
-                text="مثال: hi [5350291836378307462]",
-            )
-        ], cache_time=0, private=True)
-        return
- 
-    text, entities = parse_query(query)
-    if not entities:
-        await event.answer([
-            b.article(
-                title="⚠️ فرمت اشتباه",
-                description="مثال: hi [5350291836378307462]",
-                text="فرمت صحیح: متن [کد_ایموجی]",
-            )
-        ], cache_time=0, private=True)
-        return
- 
-    preview = text[:50] + ("..." if len(text) > 50 else "")
- 
-    await event.answer([
-        b.article(
-            title=f"ارسال با {len(entities)} ایموجی پرمیوم ✨",
-            description=preview,
-            text=query,
-            buttons=Button.inline("\u200c", b"_"),
-        )
-    ], cache_time=0, private=True)
- 
- 
-def parse_query(query: str):
-    matches = list(re.finditer(r"\[(\d+)\]", query))
-    if not matches:
-        return None, None
- 
-    text = ""
-    entities = []
-    last = 0
-    for m in matches:
-        text += query[last:m.start()]
-        entities.append(types.MessageEntityCustomEmoji(
-            offset=utf16_len(text),
-            length=1,
-            document_id=int(m.group(1)),
-        ))
-        text += FALLBACK
-        last = m.end()
- 
-    text += query[last:]
-    return text.strip(), entities
- 
- 
-async def edit_inline_message(msg_id, text: str, entities: list):
-    from telethon.tl.functions.messages import EditInlineBotMessageRequest
-    request = EditInlineBotMessageRequest(id=msg_id, message=text, entities=entities)
- 
-    dc_id = msg_id.dc_id
-    if dc_id == client.session.dc_id:
-        await client(request)
-    else:
-        sender = await client._borrow_exported_sender(dc_id)
-        try:
-            await sender.send(request)
-        finally:
-            await client._return_exported_sender(sender)
- 
- 
-@client.on(events.Raw(UpdateBotInlineSend))
-async def on_send(event):
-    if not event.msg_id:
-        return
- 
-    query = (event.query or "").strip()
-    text, entities = parse_query(query)
-    if not entities:
-        return
- 
-    for attempt in range(3):
-        try:
-            await asyncio.sleep(0.4 * (attempt + 1))
-            await edit_inline_message(event.msg_id, text, entities)
+            await message.reply(get_txt(user_id, "invalid_set"))
             return
-        except Exception as e:
-            print(f"Edit failed (attempt {attempt+1}): {e}")
- 
- 
-# =================================================================================
-# بخش «استخراج کد ایموجی» (از پیام مستقیم یا لینک پک - بدون هیچ محدودیتی)
-# =================================================================================
-@client.on(events.CallbackQuery(data=b"menu_extract"))
-async def on_menu_extract(event):
-    await event.answer()
-    pending.pop(event.sender_id, None)
-    text = (
-        "📤  استخراج کد ایموجی پرمیوم\n" + "─" * 18 +
-        "\n\n🅰  یک یا چند ایموجی پرمیوم برای من بفرست:\n\n"
-        "🔷  توجه: ایموجی باید پرمیوم باشه\n"
-        "(ایموجی‌های معمولی کد ندارن)\n\n"
-        "🎙  چند ایموجی هم می‌تونی یکجا بفرستی"
-    )
-    await edit_deco(event, text, buttons=[
-        [Button.inline("🎁 استخراج از لینک پک", b"extract_pack")],
-        [Button.inline("🔙 بازگشت", b"back_main")],
+        
+        src_emojis = list_saved_emojis(owner["user_id"])
+        limit = user_limit(user_id)
+        added = 0
+        for row in src_emojis:
+            if limit is not None and user_emoji_count(user_id) >= limit:
+                break
+            add_saved_emoji(user_id, row["name"], row["doc_id"])
+            added += 1
+        await message.reply(get_txt(user_id, "set_added").format(added))
+        return
+
+    u = get_user(user_id)
+    if not u or not u["lang"]:
+        # بار اول: انتخاب زبان
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="فارسی 🇮🇷", callback_data="setlang_fa"),
+             InlineKeyboardButton(text="English 🇬🇧", callback_data="setlang_en")]
+        ])
+        await message.reply(STRINGS["fa"]["lang_select"], reply_markup=kb)
+        return
+
+    txt = get_txt(user_id, "welcome").format(message.from_user.first_name or "User")
+    await message.reply(txt, reply_markup=get_main_menu(user_id))
+
+@dp.callback_query(F.data.startswith("setlang_"))
+async def callback_set_lang(callback: CallbackQuery):
+    lang = callback.data.split("_")[1]
+    set_user_lang(callback.from_user.id, lang)
+    await callback.answer()
+    txt = get_txt(callback.from_user.id, "welcome").format(callback.from_user.first_name or "User")
+    await callback.message.edit_text(txt, reply_markup=get_main_menu(callback.from_user.id))
+
+@dp.callback_query(F.data == "back_main")
+async def cb_back_main(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_id = callback.from_user.id
+    txt = get_txt(user_id, "welcome").format(callback.from_user.first_name or "User")
+    await callback.message.edit_text(txt, reply_markup=get_main_menu(user_id))
+
+# ================= بخش ارسال ایموجی پرمیوم (اینلاین) =================
+@dp.callback_query(F.data == "menu_premium")
+async def cb_menu_premium(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    txt = get_txt(user_id, "premium_section")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "inline_btn"), switch_inline_query="")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
     ])
- 
- 
-@client.on(events.CallbackQuery(data=b"extract_pack"))
-async def on_extract_pack(event):
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_pack_link"}
-    await event.edit(
-        "🎁  لینک پک ایموجی پرمیوم رو بفرست:\nمثال: https://t.me/addemoji/PackName",
-        buttons=[[Button.inline("🔙 بازگشت", b"menu_extract")]],
-    )
- 
- 
-async def fetch_pack_documents(short_name: str):
-    result = await client(functions.messages.GetStickerSetRequest(
-        stickerset=types.InputStickerSetShortName(short_name=short_name),
-        hash=0,
-    ))
-    return result.documents
- 
- 
-def build_numbered_chunk(docs, start_index=1):
-    text = ""
+    await callback.message.edit_text(txt, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+@dp.inline_query()
+async def inline_query_handler(inline_query: InlineQuery):
+    query = inline_query.query.strip()
+    bot_user = await bot.get_me()
+    
+    if not query:
+        await inline_query.answer(results=[
+            InlineQueryResultArticle(
+                id="1",
+                title="✨ Send Premium Emoji",
+                description="Type: Hello [emoji_id]",
+                input_message_content=InputTextMessageContent(
+                    message_text=f"Example: Hello [5350291836378307462]"
+                )
+            )
+        ], cache_time=0, is_personal=True)
+        return
+
+    matches = list(CODE_RE.finditer(query))
+    if not matches:
+        await inline_query.answer(results=[
+            InlineQueryResultArticle(
+                id="2",
+                title="⚠️ Wrong Format",
+                description="Usage: text [emoji_id]",
+                input_message_content=InputTextMessageContent(message_text="Usage: text [emoji_id]")
+            )
+        ], cache_time=0, is_personal=True)
+        return
+
+    # پردازش متن و تبدیل کدهای عددی به ساختار پریمیوم کلاینتی متناظر
+    text_buffer = ""
     entities = []
-    idx = start_index
-    for doc in docs:
-        alt = doc_alt(doc)
-        prefix = f"{idx}. "
-        text += prefix
-        emoji_offset = utf16_len(text)
-        entities.append(types.MessageEntityCustomEmoji(
-            offset=emoji_offset, length=utf16_len(alt), document_id=doc.id,
+    last_idx = 0
+    
+    for m in matches:
+        text_buffer += query[last_idx:m.start()]
+        # افزودن اینتیتی ایموجی پریمیوم اتمیک
+        entities.append(MessageEntity(
+            type="custom_emoji",
+            offset=len(text_buffer.encode("utf-16-le")) // 2,
+            length=1,
+            custom_emoji_id=m.group(1)
         ))
-        text += alt + "\n"
-        id_str = f"[{doc.id}]"
-        id_offset = utf16_len(text)
-        text += id_str
-        entities.append(types.MessageEntityCode(offset=id_offset, length=utf16_len(id_str)))
-        text += "\n" + ("─" * 10) + "\n"
-        idx += 1
-    return text, entities, idx
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_pack_link"))
-async def on_pack_link_input(event):
-    match = PACK_LINK_RE.search(event.raw_text or "")
+        text_buffer += FALLBACK_EMOJI
+        last_idx = m.end()
+        
+    text_buffer += query[last_idx:]
+
+    await inline_query.answer(results=[
+        InlineQueryResultArticle(
+            id="3",
+            title=f"Send with {len(matches)} Premium Emojis ✨",
+            description=text_buffer[:50],
+            input_message_content=InputTextMessageContent(
+                message_text=text_buffer,
+                entities=entities
+            )
+        )
+    ], cache_time=0, is_personal=True)
+
+# ================= بخش استخراج کدهای ایموجی =================
+@dp.callback_query(F.data == "menu_extract")
+async def cb_menu_extract(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    txt = get_txt(user_id, "extract_section")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "extract_pack_btn"), callback_data="extract_pack")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
+    ])
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "extract_pack")
+async def cb_extract_pack(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    await state.set_state(BotStates.await_pack_link)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_extract")]
+    ])
+    await callback.message.edit_text(get_txt(user_id, "await_pack"), reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+@dp.message(BotStates.await_pack_link)
+async def process_pack_link(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    match = PACK_LINK_RE.search(message.text or "")
     if not match:
-        await event.reply("⚠️ لینک معتبر پک ایموجی نیست. دوباره تلاش کن یا لینک کامل addemoji/... بفرست.")
+        await message.reply(get_txt(user_id, "invalid_pack"))
         return
-    pending.pop(event.sender_id, None)
+        
+    await state.clear()
     short_name = match.group(1)
- 
-    status = await event.reply("⏳ در حال دریافت پک...")
+    status_msg = await message.reply(get_txt(user_id, "fetching_pack"))
+    
     try:
-        docs = await fetch_pack_documents(short_name)
+        # دریافت اطلاعات استیکر ست پریمیوم از وب‌متد رسمی ربات تلگرام
+        stickerset = await bot.get_sticker_set(name=short_name)
+        if not stickerset or not stickerset.stickers:
+            await status_msg.edit_text(get_txt(user_id, "pack_empty"))
+            return
+            
+        # رندر و جداسازی نتایج به همراه فرمت اتمیک کدها به صورت چانک‌های متنی
+        output_txt = f"📦 Pack: `{short_name}`\n─\n"
+        for idx, sticker in enumerate(stickerset.stickers[:40], 1): # محدودیت متنی پیام تلگرام ۴۰ عدد چانک
+            output_txt += f"{idx}. Code: `{sticker.custom_emoji_id}`\n─\n"
+            
+        await message.reply(output_txt, parse_mode=ParseMode.MARKDOWN)
+        await status_msg.edit_text(get_txt(user_id, "pack_success").format(len(stickerset.stickers)))
+        
     except Exception as e:
-        await status.edit(f"❌ خطا در دریافت پک: {e}")
-        return
- 
-    if not docs:
-        await status.edit("⚠️ پک خالی است یا معتبر نیست.")
-        return
- 
-    CHUNK = 40
-    idx = 1
-    for i in range(0, len(docs), CHUNK):
-        chunk_docs = docs[i:i + CHUNK]
-        text, entities, idx = build_numbered_chunk(chunk_docs, idx)
-        try:
-            await client.send_message(event.chat_id, text, formatting_entities=entities, parse_mode=None)
-        except Exception as e:
-            await event.reply(f"❌ خطا در ارسال بخشی از نتایج: {e}")
-        await asyncio.sleep(0.3)
- 
-    await status.edit(f"✅ استخراج {len(docs)} ایموجی از پک «{short_name}» انجام شد.\n(بدون محدودیت تعداد)")
- 
- 
-# پیام مستقیم حاوی ایموجی پرمیوم (خارج از هر state دیگر) -> استخراج تکی/چندتایی
-@client.on(events.NewMessage(func=lambda e: e.is_private and e.sender_id not in pending and extract_entities_from_message(e)))
-async def on_direct_emoji_message(event):
-    docs_ids = extract_entities_from_message(event)
-    text = f"🅰  {len(docs_ids)} ایموجی پرمیوم شناسایی شد:\n\n"
-    for did in docs_ids:
-        text += f"`{did}`\n"
-    await event.reply(text)
- 
- 
-# =================================================================================
-# بخش «ایموجی‌های من» (ذخیره‌سازی شخصی، محدودیت ۵۰تایی)
-# =================================================================================
+        await status_msg.edit_text(f"❌ Error: {str(e)}")
+
+# استخراج تکی ایموجی در پیوی ربات خارج از استیت
+@dp.message(F.chat.type == "private", F.custom_emoji_text)
+async def process_direct_emoji(message: Message):
+    # تفکیک دقیق تمام سورس اینتیتی‌های مالتی‌پلتفرم کاستوم ایموجی
+    custom_emoji_ids = [e.custom_emoji_id for e in message.entities if e.type == "custom_emoji"]
+    if custom_emoji_ids:
+        res = "🅰 Premium Emojis Detected:\n\n"
+        for cid in custom_emoji_ids:
+            res += f"Code: `{cid}`\n"
+        await message.reply(res, parse_mode=ParseMode.MARKDOWN)
+
+# ================= مدیریت ذخیره شخصی (ایموجی‌های من) =================
 PAGE_SIZE = 5
- 
- 
-def render_my_emojis_page(user_id, page=0):
+
+def render_my_emojis(user_id: int, page: int = 0) -> tuple:
     rows = list_saved_emojis(user_id)
     total = len(rows)
     limit = user_limit(user_id)
-    limit_txt = "نامحدود" if limit is None else str(limit)
- 
+    limit_txt = get_txt(user_id, "unlimited") if limit is None else str(limit)
+    
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
-    page_rows = rows[page * PAGE_SIZE: (page + 1) * PAGE_SIZE]
- 
-    text = f"⭐  ایموجی‌های ذخیره‌شده: {total}/{limit_txt}\n" + "─" * 18 + "\n\n"
+    page_rows = rows[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+    
+    text = get_txt(user_id, "my_emojis_title").format(total, limit_txt) + "\n"
+    
+    kb_builder = []
     entities = []
-
-    if not page_rows:
-        text += "هنوز ایموجی‌ای ذخیره نکردی."
-    else:
-        # لیست واقعی ایموجی‌های ذخیره‌شده‌ی همین صفحه، همراه با خودِ ایموجی پرمیوم
-        # (این کار فقط در متن پیام ممکن است؛ دکمه‌های inline توانایی حمل این entity را ندارند)
-        for i, r in enumerate(page_rows, start=1):
-            alt = r["alt"] if r["alt"] else FALLBACK
-            text += f"{i}. "
-            offset = utf16_len(text)
-            entities.append(types.MessageEntityCustomEmoji(
-                offset=offset, length=utf16_len(alt), document_id=r["doc_id"],
-            ))
-            text += f"{alt}  {r['name']}\n"
- 
-    buttons = []
+    
+    # تصحیح بر اساس تصویر پیوست شده کاربر: قرار دادن خود ایموجی به جای کد عددی در کیبورد شیشه‌ای
     for r in page_rows:
-        alt = r["alt"] if r["alt"] else FALLBACK
-        # توجه: تلگرام اجازه نمی‌دهد برچسبِ دکمه‌ها entity داشته باشند، پس این‌جا فقط
-        # می‌توانیم گلیفِ ساده‌ی fallback ایموجی را نشان دهیم، نه خودِ ایموجی پرمیوم واقعی.
-        buttons.append([
-            Button.inline(f"{alt} {r['name']}", f"noop".encode()),
-            Button.inline("🗑 حذف", f"del_emoji_{r['id']}".encode()),
+        current_offset = len(text.encode("utf-16-le")) // 2
+        text += f"▪️ {r['name']}: {FALLBACK_EMOJI}\n"
+        
+        # ثبت جزییات برای رندر شدن خود ایموجی پریمیوم داخل متن مسیج باکس
+        entities.append(MessageEntity(
+            type="custom_emoji",
+            offset=current_offset + len(f"▪️ {r['name']}: ".encode("utf-16-le")) // 2,
+            length=1,
+            custom_emoji_id=str(r['doc_id'])
+        ))
+        
+        # دکمه‌های ریفکتور شده ردیف ایموجی به شکل شیشه‌ای پیشرفته
+        kb_builder.append([
+            InlineKeyboardButton(text=f"🧬 {r['name']}", callback_data="noop"), # دکمه نام کاربری
+            InlineKeyboardButton(text="🗑", callback_data=f"del_{r['id']}_{page}") # دکمه حذف اتمیک
         ])
- 
+        
     nav_row = [
-        Button.inline(f"{page+1}/{total_pages}", b"noop"),
-        Button.inline("➡️ بعدی", f"myemo_page_{page+1}".encode()),
+        InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"),
+        InlineKeyboardButton(text="➡️", callback_data=f"page_{page+1}")
     ]
-    buttons.append(nav_row)
-    buttons.append([Button.inline("✏️ افزودن ایموجی", b"add_emoji_start")])
-    buttons.append([Button.inline("🔙 بازگشت", b"menu_account")])
-    return text, entities, buttons
- 
- 
-@client.on(events.CallbackQuery(data=b"menu_my_emojis"))
-async def on_my_emojis(event):
-    await event.answer()
-    text, ent, buttons = render_my_emojis_page(event.sender_id, 0)
-    await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
- 
- 
-@client.on(events.CallbackQuery(pattern=b"myemo_page_(\\d+)"))
-async def on_my_emojis_page(event):
-    await event.answer()
-    page = int(event.pattern_match.group(1))
-    text, ent, buttons = render_my_emojis_page(event.sender_id, page)
-    await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
- 
- 
-@client.on(events.CallbackQuery(pattern=b"del_emoji_(\\d+)"))
-async def on_del_emoji(event):
-    row_id = int(event.pattern_match.group(1))
-    delete_saved_emoji(row_id, event.sender_id)
-    await event.answer("🗑 حذف شد")
-    text, ent, buttons = render_my_emojis_page(event.sender_id, 0)
-    await event.edit(text, formatting_entities=ent, buttons=buttons, parse_mode=None)
- 
- 
-@client.on(events.CallbackQuery(data=b"noop"))
-async def on_noop(event):
-    await event.answer()
- 
- 
-@client.on(events.CallbackQuery(data=b"add_emoji_start"))
-async def on_add_emoji_start(event):
-    limit = user_limit(event.sender_id)
-    if limit is not None and user_emoji_count(event.sender_id) >= limit:
-        await event.answer(f"⛔️ به سقف {limit} ایموجی رسیدی. برای افزایش با پشتیبانی تماس بگیر.", alert=True)
+    kb_builder.append(nav_row)
+    kb_builder.append([InlineKeyboardButton(text=get_txt(user_id, "add_emoji_btn"), callback_data="add_emo")])
+    kb_builder.append([InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_account")])
+    
+    return text, InlineKeyboardMarkup(inline_keyboard=kb_builder), entities
+
+@dp.callback_query(F.data == "menu_my_emojis")
+async def cb_my_emojis(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    txt, kb, entities = render_my_emojis(user_id, 0)
+    await callback.message.edit_text(text=txt, reply_markup=kb, entities=entities)
+
+@dp.callback_query(F.data.startswith("page_"))
+async def cb_my_emojis_page(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    page = int(callback.data.split("_")[1])
+    txt, kb, entities = render_my_emojis(user_id, page)
+    try:
+        await callback.message.edit_text(text=txt, reply_markup=kb, entities=entities)
+    except TelegramBadRequest:
+        await callback.answer()
+
+@dp.callback_query(F.data.startswith("del_"))
+async def cb_del_emoji(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    parts = callback.data.split("_")
+    row_id = int(parts[1])
+    page = int(parts[2])
+    
+    delete_saved_emoji(row_id, user_id)
+    await callback.answer("🗑 Deleted")
+    txt, kb, entities = render_my_emojis(user_id, page)
+    await callback.message.edit_text(text=txt, reply_markup=kb, entities=entities)
+
+@dp.callback_query(F.data == "noop")
+async def cb_noop(callback: CallbackQuery):
+    await callback.answer()
+
+# روند استاندارد درخواست اطلاعات طبق نکته شماره ۱ فرموده شده
+@dp.callback_query(F.data == "add_emo")
+async def cb_add_emo_start(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    limit = user_limit(user_id)
+    if limit is not None and user_emoji_count(user_id) >= limit:
+        await callback.answer(get_txt(user_id, "limit_reached"), show_alert=True)
         return
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_add_emoji_id"}
-    await event.edit(
-        "✏️  ایموجی پرمیوم مورد نظر رو بفرست (خودِ ایموجی یا کد به‌صورت [آیدی]):",
-        buttons=[[Button.inline("🔙 لغو", b"menu_my_emojis")]],
-    )
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_add_emoji_id"))
-async def on_add_emoji_id_input(event):
-    pairs = extract_emojis_with_alt(event)
-    if not pairs:
-        codes = parse_codes_from_text(event.raw_text or "")
-        pairs = [(c, FALLBACK) for c in codes]
-    if not pairs:
-        await event.reply("⚠️ ایموجی پرمیوم یا کد معتبری پیدا نشد. دوباره امتحان کن.")
+        
+    await state.set_state(BotStates.await_add_emoji_name) # ابتدا دریافت نام اختیاری/پیش فرض طبق فلو درخواستی
+    await callback.message.edit_text(get_txt(user_id, "send_name_prompt"))
+
+@dp.message(BotStates.await_add_emoji_name)
+async def process_emoji_name(message: Message, state: FSMContext):
+    name = (message.text or "").strip()
+    await state.update_data(saved_name=name)
+    await state.set_state(BotStates.await_add_emoji_id)
+    await message.reply(get_txt(message.from_user.id, "send_emoji_prompt"))
+
+@dp.message(BotStates.await_add_emoji_id)
+async def process_emoji_id_save(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    data = await state.get_data()
+    name = data.get("saved_name", f"Emoji #{random.randint(100,999)}")
+    
+    custom_emoji_ids = [e.custom_emoji_id for e in message.entities if e.type == "custom_emoji"] if message.entities else []
+    if not custom_emoji_ids:
+        matches = CODE_RE.findall(message.text or "")
+        if matches:
+            custom_emoji_ids = [matches[0]]
+            
+    if not custom_emoji_ids:
+        await message.reply("⚠️ No premium emoji code found.")
         return
- 
-    doc_id, alt = pairs[0]
-    # فقط وارد state «منتظر اسم» می‌شویم؛ هنوز هیچ‌چیزی در دیتابیس ذخیره نمی‌شود
-    # تا زمانی که کاربر اسم دلخواه را در پیام بعدی بفرستد.
-    pending[event.sender_id] = {"action": "await_add_emoji_name", "doc_id": doc_id, "alt": alt}
-    ent = [types.MessageEntityCustomEmoji(offset=0, length=utf16_len(alt), document_id=doc_id)]
-    await event.reply(f"{alt}  حالا یک اسم دلخواه برای این ایموجی بفرست (یا «پیش‌فرض» بزن):",
-                       formatting_entities=ent, parse_mode=None)
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_add_emoji_name"))
-async def on_add_emoji_name_input(event):
-    # این هندلر تنها زمانی اجرا می‌شود که پیام بعدی (اسم) واقعاً رسیده باشد؛
-    # یعنی ذخیره‌سازی همیشه *بعد* از دریافت اسم اتفاق می‌افتد، نه قبل از آن.
-    state = pending.pop(event.sender_id)
-    doc_id = state["doc_id"]
-    alt = state.get("alt", FALLBACK)
-    name = (event.raw_text or "").strip()
-    if not name or name in ("پیش‌فرض", "پیشفرض"):
-        name = f"ایموجی #{doc_id}"
- 
-    limit = user_limit(event.sender_id)
-    if limit is not None and user_emoji_count(event.sender_id) >= limit:
-        await event.reply(f"⛔️ به سقف {limit} ایموجی رسیدی.")
-        return
- 
-    add_saved_emoji(event.sender_id, name, doc_id, alt)
-    ent = [types.MessageEntityCustomEmoji(offset=0, length=utf16_len(alt), document_id=doc_id)]
-    await event.reply(f"{alt} «{name}» ذخیره شد ✅", formatting_entities=ent, parse_mode=None,
-                       buttons=[[Button.inline("⭐ ایموجی‌های من", b"menu_my_emojis")]])
- 
- 
-# =================================================================================
-# بخش «حساب من»
-# =================================================================================
-def account_menu_buttons():
-    return [
-        [Button.inline("⭐ ایموجی‌های من", b"menu_my_emojis"), Button.inline("📊 آمار من", b"my_stats")],
-        [Button.inline("📋 کانال‌های من", b"menu_channels"), Button.inline("⭐ اشتراک ست من", b"my_set")],
-        [Button.inline("🔙 بازگشت", b"back_main")],
-    ]
- 
- 
-@client.on(events.CallbackQuery(data=b"menu_account"))
-async def on_menu_account(event):
-    await event.answer()
-    user = await event.get_sender()
-    ensure_user(event.sender_id, user.first_name, user.username)
-    u = get_user(event.sender_id)
-    limit = user_limit(event.sender_id)
-    limit_txt = "نامحدود" if limit is None else str(limit)
-    count = user_emoji_count(event.sender_id)
-    kind = "کاربر ویژه (نامحدود)" if u["unlimited"] else "کاربر عادی"
- 
-    text = (
-        f"💠  حساب کاربری شما\n" + "─" * 18 +
-        f"\n\n◁ آیدی: {event.sender_id}"
-        f"\n◁ نام: {user.first_name or '-'}"
-        f"\n◁ یوزرنیم: @{user.username or '-'}"
-        f"\n◁ کاربر: {kind}"
-        f"\n📈 ایموجی‌های ذخیره‌شده: {count}/{limit_txt}"
-    )
-    await edit_deco(event, text, buttons=account_menu_buttons())
- 
- 
-@client.on(events.CallbackQuery(data=b"my_stats"))
-async def on_my_stats(event):
-    await event.answer()
-    count = user_emoji_count(event.sender_id)
-    channels = len(list_channels(event.sender_id))
-    text = (
-        "📊  آمار شما\n" + "─" * 18 +
-        f"\n\n⭐ تعداد ایموجی ذخیره‌شده: {count}"
-        f"\n📋 تعداد کانال‌های ثبت‌شده: {channels}"
-    )
-    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"menu_account")]])
- 
- 
-@client.on(events.CallbackQuery(data=b"my_set"))
-async def on_my_set(event):
-    await event.answer()
-    code = get_or_create_set_code(event.sender_id)
-    count = user_emoji_count(event.sender_id)
-    me = await client.get_me()
-    link = f"https://t.me/{me.username}?start=set_{code}"
-    text = (
-        "✅  ست شما آماده اشتراک شد!\n" + "─" * 18 +
-        f"\n\n⭐ {count} ایموجی"
-        f"\n◁ کد ست: {code}"
-        f"\n\n🎙  دوستت این لینک رو باز کنه تا کل ست رو یکجا بگیره:\n{link}"
-    )
-    await edit_deco(event, text, buttons=[
-        [Button.inline("⭐ کپی لینک", f"copy_set_{code}".encode())],
-        [Button.inline("🔙 بازگشت", b"menu_account")],
+        
+    doc_id = custom_emoji_ids[0]
+    await state.clear()
+    
+    add_saved_emoji(user_id, name, doc_id)
+    
+    # ساخت اینتیتی نمایش زنده ایموجی ذخیره شده در متن تاییدیه نهایی
+    success_text = get_txt(user_id, "saved_success").format(name)
+    full_text = f"{FALLBACK_EMOJI} {success_text}"
+    ent = MessageEntity(type="custom_emoji", offset=0, length=1, custom_emoji_id=str(doc_id))
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ Emojis", callback_data="menu_my_emojis")]
     ])
- 
- 
-@client.on(events.CallbackQuery(pattern=b"copy_set_(.+)"))
-async def on_copy_set(event):
-    code = event.pattern_match.group(1).decode()
-    me = await client.get_me()
-    link = f"https://t.me/{me.username}?start=set_{code}"
-    await event.answer(f"لینک: {link}", alert=True)
- 
- 
-# =================================================================================
-# بخش «کانال‌های من» / افزودن کانال + تبدیل خودکار کد در پست‌ها
-# =================================================================================
-@client.on(events.CallbackQuery(data=b"menu_channels"))
-async def on_menu_channels(event):
-    await event.answer()
-    chans = list_channels(event.sender_id)
-    text = (
-        "⌘  کانال‌های من\n" + "─" * 18 +
-        "\n\n🎙  پست‌های حاوی کد ایموجی در کانال‌های فعال\nخودکار به ایموجی پرمیوم تبدیل می‌شوند.\n"
+    await message.reply(text=full_text, entities=[ent], reply_markup=kb)
+
+# ================= حساب کاربری من =================
+@dp.callback_query(F.data == "menu_account")
+async def cb_menu_account(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    u = get_user(user_id)
+    limit = user_limit(user_id)
+    limit_txt = "Unlimited" if limit is None else str(limit)
+    count = user_emoji_count(user_id)
+    kind = "Premium (Unlimited)" if u["unlimited"] else "Regular User"
+    
+    txt = get_txt(user_id, "account_txt").format(
+        user_id, callback.from_user.first_name or "-", u["lang"], kind, count, limit_txt
     )
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "add_emoji_btn"), callback_data="menu_my_emojis"),
+         InlineKeyboardButton(text=get_txt(user_id, "stats_btn"), callback_data="my_stats")],
+        [InlineKeyboardButton(text=get_txt(user_id, "menu_channels"), callback_data="menu_channels"),
+         InlineKeyboardButton(text=get_txt(user_id, "set_btn"), callback_data="my_set")],
+        [InlineKeyboardButton(text=get_txt(user_id, "change_lang_btn"), callback_data="change_lang")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
+    ])
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "change_lang")
+async def cb_change_lang_panel(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="فارسی 🇮🇷", callback_data="setlang_fa"),
+         InlineKeyboardButton(text="English 🇬🇧", callback_data="setlang_en")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_account")]
+    ])
+    await callback.message.edit_text(STRINGS[get_user(user_id)["lang"]]["lang_select"], reply_markup=kb)
+
+@dp.callback_query(F.data == "my_stats")
+async def cb_my_stats(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    count = user_emoji_count(user_id)
+    channels_count = len(list_channels(user_id))
+    txt = get_txt(user_id, "my_stats_txt").format(count, channels_count)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_account")]
+    ])
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "my_set")
+async def cb_my_set(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    code = get_or_create_set_code(user_id)
+    bot_user = await bot.get_me()
+    link = f"https://t.me/{bot_user.username}?start=set_{code}"
+    
+    txt = get_txt(user_id, "my_set_txt").format(code, link)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "copy_btn"), callback_data=f"copy_{code}")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_account")]
+    ])
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("copy_"))
+async def cb_copy_link(callback: CallbackQuery):
+    code = callback.data.split("_")[1]
+    bot_user = await bot.get_me()
+    link = f"https://t.me/{bot_user.username}?start=set_{code}"
+    await callback.answer(f"Link: {link}", show_alert=True)
+
+# ================= مدیریت کانال‌ها + فیکس اساسی کانال پست پست هک (نکته ۵) =================
+@dp.callback_query(F.data == "menu_channels")
+async def cb_menu_channels(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    chans = list_channels(user_id)
+    txt = get_txt(user_id, "channels_txt")
+    
     if not chans:
-        text += "\n◁ هنوز کانالی ثبت نکردید."
+        txt += get_txt(user_id, "no_channels")
     else:
-        text += "\n" + "\n".join(f"◁ {c['title'] or c['channel_id']}" for c in chans)
- 
-    await edit_deco(event, text, buttons=[
-        [Button.inline("✏️ افزودن کانال", b"add_channel_start")],
-        [Button.inline("🔙 بازگشت", b"menu_account")],
+        txt += "\n".join(f"◁ {c['title'] or c['channel_id']}" for c in chans)
+        
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "add_channel_btn"), callback_data="add_channel_start")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_account")]
     ])
- 
- 
-@client.on(events.CallbackQuery(data=b"add_channel_start"))
-async def on_add_channel_start(event):
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_channel_id"}
-    text = (
-        "✈️  افزودن کانال\n" + "─" * 18 +
-        "\n\n📨  ابتدا ربات را در کانال خود ادمین کنید با این دسترسی‌ها:\n\n"
-        "⚡ افزودن اعضا (دعوت با لینک)\n"
-        "⚡ افزودن ادمین\n"
-        "⚡ ویرایش پیام‌ها\n\n"
-        f"🎙  کانال باید حداقل {CHANNEL_MIN_MEMBERS} عضو داشته باشد.\n\n"
-        "📨  سپس آیدی عددی یا یوزرنیم کانال را بفرستید:\nمثل @my_channel یا -1001234567890"
-    )
-    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"menu_channels")]])
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_channel_id"))
-async def on_channel_id_input(event):
-    pending.pop(event.sender_id, None)
-    raw = (event.raw_text or "").strip()
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "add_channel_start")
+async def cb_add_channel_start(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    await state.set_state(BotStates.await_channel_id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_channels")]
+    ])
+    await callback.message.edit_text(get_txt(user_id, "add_channel_prompt"), reply_markup=kb)
+
+@dp.message(BotStates.await_channel_id)
+async def process_channel_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    raw = (message.text or "").strip()
+    await state.clear()
+    
     try:
-        entity = await client.get_entity(raw)
-    except Exception as e:
-        await event.reply(f"❌ کانال پیدا نشد: {e}")
-        return
- 
-    if not isinstance(entity, types.Channel):
-        await event.reply("⚠️ این یک کانال معتبر نیست.")
-        return
- 
-    try:
-        full = await client(functions.channels.GetFullChannelRequest(entity))
-        members_count = full.full_chat.participants_count or 0
+        chat = await bot.get_chat(raw)
     except Exception:
-        members_count = 0
- 
-    if members_count and members_count < CHANNEL_MIN_MEMBERS:
-        await event.reply(f"⚠️ کانال باید حداقل {CHANNEL_MIN_MEMBERS} عضو داشته باشد (فعلی: {members_count}).")
+        await message.reply(get_txt(user_id, "channel_not_found"))
         return
- 
+        
+    if chat.type != "channel":
+        await message.reply(get_txt(user_id, "channel_invalid"))
+        return
+        
     try:
-        me = await client.get_permissions(entity, "me")
-        if not (me.is_admin and getattr(me, "edit_messages", False)):
-            await event.reply("⚠️ ربات باید در این کانال ادمین باشد و دسترسی «ویرایش پیام‌ها» داشته باشد.")
+        members = await bot.get_chat_member_count(chat.id)
+    except Exception:
+        members = 0
+        
+    if members < CHANNEL_MIN_MEMBERS:
+        await message.reply(get_txt(user_id, "channel_limit_err").format(CHANNEL_MIN_MEMBERS))
+        return
+        
+    try:
+        member = await chat.get_member(user_id=(await bot.get_me()).id)
+        if not member.can_edit_messages:
+            await message.reply(get_txt(user_id, "channel_admin_err"))
             return
-    except Exception as e:
-        await event.reply(f"❌ نمی‌توانم دسترسی‌های ربات در کانال را بررسی کنم: {e}")
+    except Exception:
+        await message.reply(get_txt(user_id, "channel_admin_err"))
         return
- 
-    ok = add_channel(event.sender_id, entity.id, entity.title)
+        
+    ok = add_channel(user_id, chat.id, chat.title)
     if not ok:
-        await event.reply("⚠️ این کانال قبلا ثبت شده است.")
+        await message.reply(get_txt(user_id, "channel_dup"))
         return
- 
-    await event.reply(f"✅ کانال «{entity.title}» با موفقیت ثبت شد.\nاز این پس کدهای [آیدی] در پست‌های این کانال خودکار به ایموجی تبدیل می‌شوند.")
- 
- 
-@client.on(events.NewMessage(func=lambda e: (not e.is_private) and e.raw_text and CODE_RE.search(e.raw_text)))
-async def on_channel_post(event):
-    chat = await event.get_chat()
-    if not isinstance(chat, types.Channel):
+        
+    await message.reply(get_txt(user_id, "channel_success"))
+
+# هندلر مانیتورینگ خودکار ادیت پست‌های کانال (رفع قطعی مشکل تک ستاره شدن در نکته ۵)
+@dp.channel_post(F.text)
+async def auto_convert_channel_post(message: Message):
+    if not is_registered_channel(message.chat.id):
         return
-    if not is_registered_channel(chat.id):
+        
+    matches = list(CODE_RE.finditer(message.text))
+    if not matches:
         return
- 
-    text, entities = parse_query(event.raw_text)
-    if not entities:
-        return
- 
+        
+    text_buffer = ""
+    entities = []
+    last_idx = 0
+    
+    for m in matches:
+        text_buffer += message.text[last_idx:m.start()]
+        entities.append(MessageEntity(
+            type="custom_emoji",
+            offset=len(text_buffer.encode("utf-16-le")) // 2,
+            length=1,
+            custom_emoji_id=str(m.group(1)) # قرار دادن دقیق آیدی اصلی ایموجی به صورت اتمیک
+        ))
+        text_buffer += FALLBACK_EMOJI
+        last_idx = m.end()
+        
+    text_buffer += message.text[last_idx:]
+    
     try:
-        # نکته‌ی مهم: parse_mode باید صراحتاً None باشد وگرنه Telethon سعی می‌کند متن را
-        # دوباره با پارسر پیش‌فرض (مثلا مارک‌داون) تفسیر کند و entityهای دستی‌ای که خودمان
-        # برای هر آیدی جداگانه ساختیم را نادیده می‌گیرد؛ نتیجه‌اش این بود که فارغ از این‌که
-        # کاربر چه آیدی‌ای فرستاده، فقط همان کاراکتر ⭐ (ثابت در FALLBACK) به‌عنوان متن ساده
-        # باقی می‌ماند و هیچ ایموجی پرمیومی واقعی جایگزین نمی‌شد.
-        await client.edit_message(
-            chat, event.message.id, text,
-            formatting_entities=entities,
-            parse_mode=None,
+        await bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            text=text_buffer,
+            entities=entities
         )
     except Exception as e:
-        print(f"channel auto-convert failed: {e}")
- 
- 
-# =================================================================================
-# بخش راهنما
-# =================================================================================
-@client.on(events.CallbackQuery(data=b"menu_help"))
-async def on_help(event):
-    await event.answer()
-    text = (
-        "❓  راهنمای ربات\n" + "─" * 18 +
-        "\n\n1️⃣ برای ارسال ایموجی پرمیوم در چت‌های دیگر، از حالت اینلاین استفاده کن:\n"
-        "@your_bot متن [آیدی_ایموجی]\n\n"
-        "2️⃣ برای استخراج آیدی همه ایموجی‌های یک پک، لینک پک را برای ربات بفرست.\n\n"
-        "3️⃣ در «ایموجی‌های من» می‌تونی ایموجی‌های پرکاربردت رو ذخیره کنی.\n\n"
-        "4️⃣ با افزودن کانال، پست‌های حاوی کد به‌صورت خودکار تبدیل می‌شوند."
-    )
-    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"back_main")]])
- 
- 
-# =================================================================================
-# بخش پشتیبانی (بدون پیوی مستقیم) + ارسال تیکت
-# =================================================================================
-@client.on(events.CallbackQuery(data=b"menu_support"))
-async def on_support(event):
-    await event.answer()
-    text = (
-        "💎  پشتیبانی\n" + "─" * 18 +
-        "\n\n📨  برای ارتباط با پشتیبانی یکی از روش‌های زیر را انتخاب کن:\n\n"
-        "⚡ پیوی پشتیبانی:\nپیام خود را همینجا بفرست، پشتیبانی از طریق ربات پاسخ می‌دهد\n\n"
-        "🕐 ارسال تیکت:\nپیام خود را ثبت کن تا پشتیبانی پاسخ دهد"
-    )
-    await edit_deco(event, text, buttons=[
-        [Button.inline("🦖 پیوی پشتیبانی", b"support_chat"), Button.inline("🖼 ارسال تیکت", b"support_ticket")],
-        [Button.inline("🔙 بازگشت", b"back_main")],
+        print(f"Channel replace log err: {e}")
+
+# ================= بخش راهنما و ربات مکمل =================
+@dp.callback_query(F.data == "menu_help")
+async def cb_menu_help(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    txt = get_txt(user_id, "help_txt")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛠️ Maker Bot: @TgEmojis_bot", url="https://t.me/TgEmojis_bot")], # دکمه مکمل بر اساس نکته ۶ شما
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
     ])
- 
- 
-@client.on(events.CallbackQuery(data=b"support_chat"))
-async def on_support_chat(event):
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_support_msg"}
-    await event.edit(
-        "📨 پیام خودت رو بنویس، مستقیم (فقط از طریق ربات) برای پشتیبانی ارسال می‌شود:",
-        buttons=[[Button.inline("🔙 لغو", b"menu_support")]],
-    )
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_support_msg"))
-async def on_support_msg_input(event):
-    pending.pop(event.sender_id, None)
-    user = await event.get_sender()
-    msg = event.raw_text or ""
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+# ================= بخش پشتیبانی و تیکت‌ها =================
+@dp.callback_query(F.data == "menu_support")
+async def cb_menu_support(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    txt = get_txt(user_id, "support_txt")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "support_chat_btn"), callback_data="support_chat"),
+         InlineKeyboardButton(text=get_txt(user_id, "support_ticket_btn"), callback_data="support_ticket")],
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="back_main")]
+    ])
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "support_chat")
+async def cb_support_chat(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    await state.set_state(BotStates.await_support_msg)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_support")]
+    ])
+    await callback.message.edit_text(get_txt(user_id, "support_prompt"), reply_markup=kb)
+
+@dp.message(BotStates.await_support_msg)
+async def process_support_msg(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    await state.clear()
+    
     for admin_id in ADMIN_IDS:
-        await safe_send(
-            admin_id,
-            f"✉️ پیام پشتیبانی جدید\nاز: {user.first_name or ''} (@{user.username or '-'}) | ID: {event.sender_id}\n\n{msg}\n\n"
-            f"↩️ برای پاسخ: /reply {event.sender_id} متن_پاسخ",
-        )
-    await event.reply("✅ پیام شما برای پشتیبانی ارسال شد. منتظر پاسخ باشید.")
- 
- 
-@client.on(events.NewMessage(pattern=r"/reply (\d+) (.+)", func=lambda e: e.is_private and e.sender_id in ADMIN_IDS))
-async def on_admin_reply(event):
-    target_id = int(event.pattern_match.group(1))
-    text = event.pattern_match.group(2)
-    ok = await safe_send(target_id, f"💎 پاسخ پشتیبانی:\n\n{text}")
-    await event.reply("✅ ارسال شد." if ok else "❌ ارسال نشد (کاربر ربات را بلاک کرده).")
- 
- 
-@client.on(events.CallbackQuery(data=b"support_ticket"))
-async def on_support_ticket(event):
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_ticket_msg"}
-    await event.edit(
-        "🖼 متن تیکت خودت رو بنویس تا ثبت بشه:",
-        buttons=[[Button.inline("🔙 لغو", b"menu_support")]],
-    )
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and pending.get(e.sender_id, {}).get("action") == "await_ticket_msg"))
-async def on_ticket_msg_input(event):
-    pending.pop(event.sender_id, None)
-    add_ticket(event.sender_id, event.raw_text or "")
-    user = await event.get_sender()
+        try:
+            await bot.send_message(
+                admin_id,
+                f"✉️ New PM Support\nFrom: {message.from_user.first_name} (@{message.from_user.username or '-'}) | ID: `{user_id}`\n\n{message.text}\n\nUse command `/reply {user_id} text` to answer."
+            )
+        except Exception:
+            pass
+    await message.reply(get_txt(user_id, "support_sent"))
+
+@dp.message(Command("reply"))
+async def cmd_admin_reply(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        await message.reply("Usage: /reply target_id text")
+        return
+    target_id = int(parts[1])
+    reply_text = parts[2]
+    
+    try:
+        await bot.send_message(target_id, f"💎 Support Reply:\n\n{reply_text}")
+        await message.reply("✅ Sent.")
+    except Exception as e:
+        await message.reply(f"❌ Failed: {e}")
+
+@dp.callback_query(F.data == "support_ticket")
+async def cb_support_ticket(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    await state.set_state(BotStates.await_ticket_msg)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_txt(user_id, "back"), callback_data="menu_support")]
+    ])
+    await callback.message.edit_text(get_txt(user_id, "ticket_prompt"), reply_markup=kb)
+
+@dp.message(BotStates.await_ticket_msg)
+async def process_ticket_msg(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    await state.clear()
+    add_ticket(user_id, message.text or "")
+    
     for admin_id in ADMIN_IDS:
-        await safe_send(
-            admin_id,
-            f"🎫 تیکت جدید\nاز: {user.first_name or ''} (@{user.username or '-'}) | ID: {event.sender_id}\n\n{event.raw_text}",
-        )
-    await event.reply("✅ تیکت شما ثبت شد. به‌زودی بررسی می‌شود.")
- 
- 
-# =================================================================================
-# پنل مدیریت
-# =================================================================================
-def is_admin(user_id):
-    return user_id in ADMIN_IDS
- 
- 
-@client.on(events.CallbackQuery(data=b"admin_panel"))
-async def on_admin_panel(event):
-    if not is_admin(event.sender_id):
-        await event.answer("⛔️ شما به این بخش دسترسی ندارید.", alert=True)
+        try:
+            await bot.send_message(
+                admin_id,
+                f"🎫 Ticket New!\nFrom: {message.from_user.first_name} | ID: `{user_id}`\n\n{message.text}"
+            )
+        except Exception:
+            pass
+    await message.reply(get_txt(user_id, "ticket_sent"))
+
+# ================= پنل مدیریت ادمین =================
+@dp.callback_query(F.data == "admin_panel")
+async def cb_admin_panel(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
         return
-    await event.answer()
-    await event.edit(
-        "⚙️  پنل مدیریت\n" + "─" * 18,
-        buttons=[
-            [Button.inline("📊 آمار دقیق", b"admin_stats")],
-            [Button.inline("🔓 حذف محدودیت کاربر", b"admin_unlimit")],
-            [Button.inline("📢 ارسال پیام همگانی", b"admin_broadcast")],
-            [Button.inline("🔙 بازگشت", b"back_main")],
-        ],
-    )
- 
- 
-@client.on(events.CallbackQuery(data=b"admin_stats"))
-async def on_admin_stats(event):
-    if not is_admin(event.sender_id):
-        await event.answer("⛔️ دسترسی ندارید.", alert=True)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Stats Detailed", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="🔓 Unlimit User", callback_data="admin_unlimit")],
+        [InlineKeyboardButton(text="📢 Broadcast MSG", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="🔙 Back", callback_data="back_main")]
+    ])
+    await callback.message.edit_text("⚙️ Admin Management Panel", reply_markup=kb)
+
+@dp.callback_query(F.data == "admin_stats")
+async def cb_admin_stats(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
         return
-    await event.answer()
-    s = stats()
-    text = (
-        "📊  آمار دقیق ربات\n" + "─" * 18 +
-        f"\n\n👥 کاربران: {s['users']}"
-        f"\n⭐ کل ایموجی‌های ذخیره‌شده: {s['emojis']}"
-        f"\n📋 کانال‌های ثبت‌شده: {s['channels']}"
-        f"\n🎫 تیکت‌های باز: {s['open_tickets']}"
-        f"\n🔓 کاربران نامحدود: {s['unlimited_users']}"
-    )
-    await edit_deco(event, text, buttons=[[Button.inline("🔙 بازگشت", b"admin_panel")]])
- 
- 
-@client.on(events.CallbackQuery(data=b"admin_unlimit"))
-async def on_admin_unlimit(event):
-    if not is_admin(event.sender_id):
-        await event.answer("⛔️ دسترسی ندارید.", alert=True)
+    s = db_stats()
+    txt = f"📊 System Details:\n\nUsers: {s['users']}\nSaved Emojis: {s['emojis']}\nChannels: {s['channels']}\nOpen Tickets: {s['open_tickets']}\nPremium Users: {s['unlimited_users']}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[[[InlineKeyboardButton(text="Back", callback_data="admin_panel")]]])
+    await callback.message.edit_text(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "admin_unlimit")
+async def cb_admin_unlimit(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
         return
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_unlimit_target"}
-    await event.edit(
-        "🔓 آیدی عددی کاربری که می‌خوای محدودیتش برداشته بشه رو بفرست:",
-        buttons=[[Button.inline("🔙 لغو", b"admin_panel")]],
-    )
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and e.sender_id in ADMIN_IDS and pending.get(e.sender_id, {}).get("action") == "await_unlimit_target"))
-async def on_unlimit_target_input(event):
-    pending.pop(event.sender_id, None)
-    raw = (event.raw_text or "").strip()
+    await state.set_state(BotStates.admin_unlimit_target)
+    await callback.message.edit_text("Enter user numeric ID to lift storage boundaries:")
+
+@dp.message(BotStates.admin_unlimit_target)
+async def process_admin_unlimit(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    raw = (message.text or "").strip()
+    await state.clear()
     if not raw.isdigit():
-        await event.reply("⚠️ آیدی عددی معتبر بفرست.")
+        await message.reply("Invalid numeric id.")
         return
     target_id = int(raw)
     ensure_user(target_id)
+    
     cur = _conn.cursor()
     cur.execute("UPDATE users SET unlimited=1 WHERE user_id=?", (target_id,))
     _conn.commit()
-    await event.reply(f"✅ محدودیت کاربر {target_id} برداشته شد (نامحدود شد).")
-    await safe_send(target_id, "🎉 محدودیت ذخیره‌سازی ایموجی شما توسط ادمین برداشته شد و اکنون نامحدود است.")
- 
- 
-@client.on(events.CallbackQuery(data=b"admin_broadcast"))
-async def on_admin_broadcast(event):
-    if not is_admin(event.sender_id):
-        await event.answer("⛔️ دسترسی ندارید.", alert=True)
+    await message.reply(f"User {target_id} is now unrestricted Premium member.")
+    try:
+        await bot.send_message(target_id, "🎉 Your emoji storage limits have been removed by administrator!")
+    except Exception:
+        pass
+
+@dp.callback_query(F.data == "admin_broadcast")
+async def cb_admin_broadcast(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
         return
-    await event.answer()
-    pending[event.sender_id] = {"action": "await_broadcast_msg"}
-    await event.edit(
-        "📢 متن پیام همگانی رو بفرست تا برای همه کاربران ارسال بشه:",
-        buttons=[[Button.inline("🔙 لغو", b"admin_panel")]],
-    )
- 
- 
-@client.on(events.NewMessage(func=lambda e: e.is_private and e.sender_id in ADMIN_IDS and pending.get(e.sender_id, {}).get("action") == "await_broadcast_msg"))
-async def on_broadcast_msg_input(event):
-    pending.pop(event.sender_id, None)
-    text = event.raw_text or ""
+    await state.set_state(BotStates.admin_broadcast_msg)
+    await callback.message.edit_text("Send message text to broadcast to everyone:")
+
+@dp.message(BotStates.admin_broadcast_msg)
+async def process_admin_broadcast(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    await state.clear()
     ids = all_user_ids()
-    status = await event.reply(f"⏳ در حال ارسال به {len(ids)} کاربر...")
-    sent, failed = 0, 0
+    status_msg = await message.reply(f"⏳ Broadcasting to {len(ids)} users...")
+    
+    success, fail = 0, 0
     for uid in ids:
-        ok = await safe_send(uid, f"📢 پیام همگانی:\n\n{text}")
-        if ok:
-            sent += 1
-        else:
-            failed += 1
-        await asyncio.sleep(0.05)
-    await status.edit(f"✅ ارسال شد.\nموفق: {sent} | ناموفق: {failed}")
- 
- 
-print("Bot started...")
-client.run_until_disconnected()
- 
+        try:
+            await bot.send_message(uid, f"📢 Broadcast:\n\n{message.text}")
+            success += 1
+        except Exception:
+            fail += 1
+            
+    await status_msg.edit_text(f"✅ Broadcast Done.\nSuccess: {success} | Failed: {fail}")
+
+
+# ================= استارت نهایی سرور ایاگرام =================
+if __name__ == "__main__":
+    import asyncio
+    print("Aiogram Bot service successfully initiated...")
+    asyncio.run(dp.start_polling(bot))
