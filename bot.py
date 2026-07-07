@@ -575,7 +575,10 @@ async def process_pack_link(message: Message, state: FSMContext):
                 custom_emoji_id=str(sticker.custom_emoji_id) # آیدی اختصاصی همین ایموجی
             ))
             
-        await message.reply(output_txt, entities=entities, parse_mode=ParseMode.MARKDOWN)
+        await message.reply(
+    output_txt,
+    entities=entities
+)
         await status_msg.edit_text(get_txt(user_id, "pack_success").format(len(stickerset.stickers)))
         
     except Exception as e:
@@ -596,7 +599,7 @@ async def process_direct_emoji(message: Message):
                 length=1,
                 custom_emoji_id=str(cid)
             ))
-        await message.reply(res, entities=entities, parse_mode=ParseMode.MARKDOWN)
+        await message.reply(res, entities=entities)
 
 # ================= مدیریت ذخیره شخصی (ایموجی‌های من) =================
 PAGE_SIZE = 5
