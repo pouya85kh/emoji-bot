@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-@dataclass(slots=True)
+@dataclass
 class Localizer:
     locales_dir: Path
     fallback_locale: str = "fa"
