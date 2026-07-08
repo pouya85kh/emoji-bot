@@ -67,14 +67,14 @@ def parse_codes(text: str | None) -> list[int]:
     return [int(m.group(1)) for m in CODE_RE.finditer(text or "")]
 
 
-def parse_inline_query(query: str) -> tuple[str | None, list[MessageEntity] | None]:
-    matches = list(CODE_RE.finditer(query))
-    if not matches:
-        return None, None
+def parse_inline_query(query: str):
+    entities = []
     out = ""
-    entities: list[MessageEntity] = []
     last = 0
-        for m in matches:
+
+    matches = list(EMOJI_ID_RE.finditer(query))
+
+    for m in matches:
         out += query[last:m.start()]
 
         emoji_id = int(m.group(1))
@@ -90,9 +90,10 @@ def parse_inline_query(query: str) -> tuple[str | None, list[MessageEntity] | No
         out += "🙂"
 
         last = m.end()
-    out += query[last:]
-    return out.strip(), entities
 
+    out += query[last:]
+
+    return out, entities
 
 def sticker_alt(sticker: Sticker, fallback: str = "⭐") -> str:
     return sticker.emoji or fallback
