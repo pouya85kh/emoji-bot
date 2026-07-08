@@ -75,10 +75,20 @@ def parse_inline_query(query: str) -> tuple[str | None, list[MessageEntity] | No
     entities: list[MessageEntity] = []
     last = 0
     for m in matches:
-        out += query[last:m.start()]
-        entities.append(custom_emoji_entity(int(m.group(1)), offset=utf16_len(out), length=1))
-        out += "⭐"
-        last = m.end()
+    out += query[last:m.start()]
+
+    emoji_id = int(m.group(1))
+
+    entities.append(
+        custom_emoji_entity(
+            emoji_id,
+            offset=utf16_len(out),
+            length=1
+        )
+    )
+
+    out += "🙂"
+    last = m.end()
     out += query[last:]
     return out.strip(), entities
 
