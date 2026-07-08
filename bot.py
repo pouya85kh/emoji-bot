@@ -13,17 +13,7 @@ from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    InlineQueryResultArticle,
-    InputTextMessageContent,
-    MessageEntityCustomEmoji,
-    CallbackQuery,
-    Message,
-    InlineQuery,
-    ChosenInlineResult,
-)
+from aiogram import types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.utils.deep_linking import create_start_link
 
