@@ -1,0 +1,81 @@
+{
+  "menu": {
+    "welcome": "🚀  Welcome, {name}!\n──────────────────\n\n📨  With this bot you can send premium emojis\nin any Telegram chat!\n\n🔖  Use the menu below:"
+  },
+  "start": {
+    "invalid_set": "⚠️ The set code is invalid or has expired.",
+    "set_added": "✅ {count} emojis from the shared set were added to your account."
+  },
+  "premium": {
+    "title": "✨  Send Premium Emoji",
+    "body": "📝  Send a new message in this chat:\n\n⚡  Multiple premium emojis (send them all together)\nor numeric codes: [5792080508976373427]\n\n🎙  Separate multiple codes with spaces or brackets:\n[code1] [code2] [code3]\n\n🎙  Then you can choose a custom name\n(or type «default»)"
+  },
+  "extract": {
+    "title": "📤  Extract Premium Emoji IDs",
+    "body": "🅰  Send one or more premium emojis to me:\n\n🔷  Note: the emoji must be premium\n(regular emojis have no IDs)\n\n🎙  You can send several at once.",
+    "ask_pack": "🎁  Send the premium emoji pack link:\nExample: https://t.me/addemoji/PackName",
+    "invalid_pack": "⚠️ That is not a valid emoji pack link. Try again or send the full addemoji/... link.",
+    "loading": "⏳ Fetching pack...",
+    "empty": "⚠️ The pack is empty or invalid.",
+    "error": "❌ Error while fetching pack: {error}",
+    "chunk_error": "❌ Error while sending a result chunk: {error}",
+    "done": "✅ Extracted {count} emojis from pack «{short_name}».\n(No limit)"
+  },
+  "emoji": {
+    "deleted": "🗑 Deleted",
+    "limit_reached": "⛔️ You reached the limit of {limit} emojis. Contact support to increase it.",
+    "ask_id": "✏️  Send the premium emoji you want to save (the emoji itself or a code in [brackets]):",
+    "ask_name": "{alt}  Now send a custom name for this emoji (or type «default»):",
+    "invalid_id": "⚠️ No valid premium emoji or code found. Try again.",
+    "default_name": "Emoji #{doc_id}",
+    "saved": "{alt} «{name}» has been saved ✅",
+    "detected": "🅰  {count} premium emojis detected:"
+  },
+  "account": {
+    "vip": "VIP user (unlimited)",
+    "normal": "Regular user",
+    "body": "💠  Your account\n──────────────────\n\n◁ ID: {user_id}\n◁ Name: {first_name}\n◁ Username: @{username}\n◁ Type: {kind}\n📈 Saved emojis: {count}/{limit_txt}",
+    "stats": "📊  Your stats\n──────────────────\n\n⭐ Saved emojis: {emojis}\n📋 Registered channels: {channels}",
+    "set_link": "✅  Your set is ready to share!\n──────────────────\n\n⭐ {count} emojis\n◁ Set code: {code}\n\n🎙  Ask your friend to open this link to import the whole set:\n{link}"
+  },
+  "channels": {
+    "body": "⌘  My channels\n──────────────────\n\n🎙  Posts containing emoji IDs in active channels\nare automatically converted into premium emojis.",
+    "empty": "◁ No channels registered yet.",
+    "ask_channel": "✈️  Add channel\n──────────────────\n\n📨  First make the bot an admin in your channel with these rights:\n\n⚡ Invite users\n⚡ Add admins\n⚡ Edit messages\n\n🎙  The channel must have at least 50 members.\n\n📨  Then send the numeric ID or username of the channel:\nlike @my_channel or -1001234567890",
+    "invalid": "⚠️ This is not a valid channel.",
+    "duplicate": "⚠️ This channel is already registered.",
+    "saved": "✅ Channel «{title}» registered successfully.\nFrom now on, [IDs] in this channel will automatically convert to premium emojis."
+  },
+  "help": {
+    "body": "❓  Bot guide\n──────────────────\n\n1️⃣ To send premium emojis in other chats, use inline mode:\n@your_bot text [emoji_id]\n\n2️⃣ To extract all IDs from an emoji pack, send the pack link to the bot.\n\n3️⃣ In «My emojis» you can save your frequently used premium emojis.\n\n4️⃣ After adding a channel, posts containing IDs are converted automatically."
+  },
+  "support": {
+    "body": "💎  Support\n──────────────────\n\n📨  Choose one of these ways to contact support:\n\n⚡ Support chat:\nSend your message here and support will reply through the bot\n\n🕐 Ticket:\nRegister your message and support will review it",
+    "ask_chat": "📨 Write your message here; it will be forwarded to support through the bot:",
+    "ask_ticket": "🖼 Write your ticket text to register it:",
+    "sent": "✅ Your message has been sent to support. Please wait for a reply.",
+    "ticket_saved": "✅ Your ticket has been registered. It will be reviewed soon.",
+    "admin_new_message": "✉️ New support message\nFrom: {first_name} (@{username}) | ID: {user_id}\n\n{message}\n\n↩️ Reply: /reply {user_id} your_reply",
+    "admin_new_ticket": "🎫 New ticket\nFrom: {first_name} (@{username}) | ID: {user_id}\n\n{message}",
+    "reply_usage": "⚠️ Usage: /reply <user_id> <text>",
+    "reply_message": "💎 Support reply:\n\n{message}",
+    "reply_sent": "✅ Sent.",
+    "reply_failed": "❌ Not sent (user blocked the bot or is unavailable)."
+  },
+  "admin": {
+    "panel": "⚙️  Admin panel\n──────────────────",
+    "denied": "⛔️ You do not have access to this section.",
+    "stats": "📊  Detailed bot stats\n──────────────────\n\n👥 Users: {users}\n⭐ Saved emojis: {emojis}\n📋 Registered channels: {channels}\n🎫 Open tickets: {open_tickets}\n🔓 Unlimited users: {unlimited_users}",
+    "ask_unlimit": "🔓 Send the numeric ID of the user whose limit you want to remove:",
+    "invalid_user_id": "⚠️ Please send a valid numeric ID.",
+    "unlimited": "✅ User {user_id} is now unlimited.",
+    "user_unlimited": "🎉 Your emoji limit has been removed by an admin and you are now unlimited.",
+    "ask_broadcast": "📢 Send the broadcast message to be delivered to all users:",
+    "broadcasting": "⏳ Sending to {count} users...",
+    "broadcast_message": "📢 Broadcast:\n\n{message}",
+    "broadcast_done": "✅ Sent.\nSuccess: {sent} | Failed: {failed}"
+  },
+  "language": {
+    "change_prompt": "🌐 Choose your language:"
+  }
+}
