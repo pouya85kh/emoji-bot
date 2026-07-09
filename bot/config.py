@@ -25,6 +25,15 @@ class Config:
     # the original bot -- otherwise messages using it will fail to send)
     deco_emoji_id: int = 5057918405923832965
 
+    # Decorative emoji (the small icons overlaid on plain unicode emoji in
+    # menu texts) require deco_emoji_id above to be a REAL premium-emoji
+    # document id the bot account can use. Until you set a real one, this
+    # stays False so the bot works normally (with plain unicode emoji,
+    # no special premium rendering) instead of failing to send messages.
+    # Once you have a real id, set this to True (or export
+    # ENABLE_DECORATIVE_EMOJI=true) to turn the decoration back on.
+    enable_decorative_emoji: bool = os.environ.get("ENABLE_DECORATIVE_EMOJI", "false").lower() == "true"
+
     page_size: int = 5
 
 
