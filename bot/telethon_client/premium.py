@@ -64,7 +64,15 @@ def premiumize(text: str) -> tuple[str, list]:
     """Overlay a MessageEntityCustomEmoji on every known plain unicode emoji
     in `text`, without changing the visible text -- makes decorative emojis
     render as premium in clients that support it. Output: (unchanged text,
-    entities list)."""
+    entities list).
+
+    No-op (returns the text unchanged with no entities) unless
+    config.enable_decorative_emoji is True, since doing this for real
+    requires a genuine premium-emoji document id in config.deco_emoji_id --
+    see config.py."""
+    if not config.enable_decorative_emoji:
+        return text, []
+
     entities = []
     out = ""
     i = 0
@@ -88,8 +96,12 @@ def premiumize(text: str) -> tuple[str, list]:
 
 
 def with_deco(key: str, text: str) -> tuple[str, list]:
-    """Text with a single decorative premium emoji prefixed, plus its entity."""
+    """Text with a single decorative premium emoji prefixed, plus its entity.
+    Falls back to a plain fallback-glyph prefix (no entity) until a real
+    decorative emoji id is configured -- see config.enable_decorative_emoji."""
     full_text = config.fallback_emoji + "  " + text
+    if not config.enable_decorative_emoji:
+        return full_text, []
     ent = types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI[key])
     return full_text, [ent]
 
