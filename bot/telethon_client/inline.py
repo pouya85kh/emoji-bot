@@ -24,8 +24,10 @@ async def send_deco(chat_id: int, text: str, entities: list | None = None, butto
     )
 
 
-async def edit_deco_message(chat_id: int, message_id: int, text: str,
+async def edit_deco_message(chat_id, message_id: int, text: str,
                              entities: list | None = None, buttons=None):
+    """`chat_id` may be a bare chat id or a resolved Telethon entity --
+    Telethon's EntityLike accepts either."""
     return await client.edit_message(
         chat_id, message_id, text, formatting_entities=entities, buttons=buttons, parse_mode=None,
     )
