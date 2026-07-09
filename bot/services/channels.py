@@ -76,6 +76,15 @@ async def auto_convert_post(chat, message_id: int, raw_text: str) -> None:
     if not entities:
         return
     try:
-        await tl_inline.edit_deco_message(chat.id, message_id, text, entities)
+        # Resolve the full Telethon entity first, mirroring the original
+        # bot's `chat = await event.get_chat()`. Passing a bare chat id
+        # (as it arrives from Aiogram) straight into client.edit_message()
+        # relies on Telethon's peer cache already holding an access_hash
+        # for it; resolving explicitly here is more robust and guarantees
+        # Telegram has everything it needs to actually apply the custom
+        # emoji entities instead of silently keeping the plain fallback
+        # character.
+        entity = await tl_inline.resolve_channel(chat.id)
+        await tl_inline.edit_deco_message(entity, message_id, text, entities)
     except Exception as e:
         print(f"channel auto-convert failed: {e}")
