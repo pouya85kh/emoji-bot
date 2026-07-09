@@ -72,7 +72,7 @@ async def get_bot_username() -> str:
     return me.username
 
 
-async def edit_inline_message(msg_id, text: str, entities: list) -> None:
+async def edit_inline_message(msg_id, text: str, entities: list):
     """Edit a message that was sent via inline mode. This requires the raw
     MTProto request + correct data-center routing; there is no Bot API
     equivalent for editing arbitrary inline-sent messages after the fact."""
@@ -81,10 +81,10 @@ async def edit_inline_message(msg_id, text: str, entities: list) -> None:
 
     dc_id = msg_id.dc_id
     if dc_id == client.session.dc_id:
-        await client(request)
+        return await client(request)
     else:
         sender = await client._borrow_exported_sender(dc_id)
         try:
-            await sender.send(request)
+            return await sender.send(request)
         finally:
             await client._return_exported_sender(sender)
