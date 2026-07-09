@@ -85,6 +85,12 @@ async def auto_convert_post(chat, message_id: int, raw_text: str) -> None:
         # emoji entities instead of silently keeping the plain fallback
         # character.
         entity = await tl_inline.resolve_channel(chat.id)
-        await tl_inline.edit_deco_message(entity, message_id, text, entities)
+        result = await tl_inline.edit_deco_message(entity, message_id, text, entities)
+        if result is not None:
+            print(f"[channel] edit applied, confirmed entities: {result.entities!r}")
+        else:
+            print("[channel] edit_message returned no local message object "
+                  "(known Telethon quirk for channel edits) -- request was "
+                  "sent, but we can't directly confirm entities from here")
     except Exception as e:
         print(f"channel auto-convert failed: {e}")
