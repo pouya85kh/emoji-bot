@@ -31,21 +31,26 @@ from bot.telethon_client.premium import parse_query
 
 
 async def _on_bot_inline_send(event) -> None:
+    print(f"[inline] UpdateBotInlineSend received: msg_id={event.msg_id!r} query={event.query!r}")
     if not event.msg_id:
+        print("[inline] no msg_id on event -- nothing to edit (this is expected for "
+              "results sent by other means, e.g. via_bot from another client)")
         return
 
     query = (event.query or "").strip()
     text, entities = parse_query(query)
     if not entities:
+        print(f"[inline] query {query!r} produced no premium-emoji entities, skipping edit")
         return
 
     for attempt in range(3):
         try:
             await asyncio.sleep(0.4 * (attempt + 1))
-            await edit_inline_message(event.msg_id, text, entities)
+            result = await edit_inline_message(event.msg_id, text, entities)
+            print(f"[inline] edit succeeded on attempt {attempt + 1}: {result!r}")
             return
         except Exception as e:
-            print(f"Edit failed (attempt {attempt + 1}): {e}")
+            print(f"[inline] edit failed (attempt {attempt + 1}): {e}")
 
 
 async def main() -> None:
