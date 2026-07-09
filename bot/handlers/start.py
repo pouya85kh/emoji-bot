@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.types import CallbackQuery, Message
 
+from bot.config import config
 from bot.database import database as db
 from bot.keyboards.inline import language_keyboard, main_menu_buttons
 from bot.services import premium as premium_service
@@ -18,9 +19,12 @@ async def send_main_menu(user_id: int, chat_id: int, first_name: str | None,
     text = t(lang, "welcome", name=name)
     text, ent = premium_service.premiumize(text)
     # decorative rocket prefix entity, matching original send_main_menu()
-    from telethon.tl import types
-    from bot.config import EMOJI
-    ent.append(types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI["rocket"]))
+    # -- only added once a real decorative emoji id is configured (see
+    # config.enable_decorative_emoji)
+    if config.enable_decorative_emoji:
+        from telethon.tl import types
+        from bot.config import EMOJI
+        ent.append(types.MessageEntityCustomEmoji(offset=0, length=1, document_id=EMOJI["rocket"]))
     buttons = main_menu_buttons(lang, user_id)
     if edit_message_id:
         await edit_deco_message(chat_id, edit_message_id, text, ent, buttons)
