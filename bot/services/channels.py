@@ -20,6 +20,7 @@ class ChannelError(Exception):
 
 async def register_channel(user_id: int, identifier: str):
     from telethon.tl import types
+    from telethon.utils import get_peer_id
 
     try:
         entity = await tl_inline.resolve_channel(identifier)
@@ -46,7 +47,13 @@ async def register_channel(user_id: int, identifier: str):
     if not has_perm:
         raise ChannelError("channel_no_admin")
 
-    ok = db.add_channel(user_id, entity.id, entity.title)
+    # IMPORTANT: store the Bot-API-compatible "-100..." id (get_peer_id),
+    # not Telethon's bare entity.id -- channel posts arrive through Aiogram
+    # (Bot API) where message.chat.id is always in the -100... form, so the
+    # stored id must match that format or the auto-convert lookup below will
+    # never find the channel.
+    bot_api_channel_id = get_peer_id(entity)
+    ok = db.add_channel(user_id, bot_api_channel_id, entity.title)
     if not ok:
         raise ChannelError("channel_already_registered")
 
